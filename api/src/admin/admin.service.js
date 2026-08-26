@@ -382,12 +382,20 @@ export class AdminService {
       // named tab of its own (same precedent DISPUTED already had) — only
       // IN_PROCESS/CANCELLED specifically require a pickup to already be on
       // record, per this task's own definitions.
+      //
+      // Bug fixed here: the raw Exchange status enum is literally 'ACTIVE'/
+      // 'CANCELLED' — falling through to `e.status` for the "no pickup yet"
+      // case collided with the *listing*-based Active/Cancelled tab keys
+      // below, wrongly surfacing an already-accepted (no longer available)
+      // book under "Active", and a still-pending cancellation under
+      // "Cancelled". Both unbucketed cases now get a distinct sentinel that
+      // can never match a real tab key.
       stage: e.status === 'COMPLETED'
         ? 'COMPLETED'
-        : e.request?.pickup && e.status === 'ACTIVE'
-          ? 'IN_PROCESS'
-          : e.request?.pickup && e.status === 'CANCELLED'
-            ? 'CANCELLED'
+        : e.status === 'ACTIVE'
+          ? (e.request?.pickup ? 'IN_PROCESS' : 'UNBUCKETED_ACCEPTED')
+          : e.status === 'CANCELLED'
+            ? (e.request?.pickup ? 'CANCELLED' : 'UNBUCKETED_CANCELLED')
             : e.status,
       when: e.completedAt || e.createdAt,
     }));
