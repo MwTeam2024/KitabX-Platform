@@ -1,0 +1,103 @@
+# Render Blueprint for the KitabX API (NestJS + Prisma + Socket.IO).
+#
+# Why Render instead of Vercel: this backend needs a persistent, always-on
+# process — Socket.IO (live chat/notifications, §14/§35/§46) needs a
+# long-lived connection, and the @nestjs/schedule cron jobs (request expiry,
+# chat retention, chat auto-disable) need something running in the
+# background around the clock. Vercel's serverless functions are
+# short-lived and stateless, so neither would work there. The `web` sibling
+# deploys separately to Vercel — see its own vercel.json — and just calls
+# this API's public URL directly (NEXT_PUBLIC_API_URL), no proxying needed.
+#
+# This targets the deploy-ready github.com/MwTeam2024/KitabX-Platform repo,
+# where this file lives at `api/render.yaml` and `api`/`web` sit at the repo
+# root (pushed there from the KitabX monorepo's apps/ folder via `git
+# subtree`) — NOT the original KitabX monorepo, where the equivalent path is
+# apps/api/render.yaml with rootDir apps/api instead.
+#
+# To deploy: Render dashboard → New → Blueprint → select the KitabX-Platform
+# repo. Render looks for render.yaml at the repo root by default — since
+# this one lives at api/render.yaml instead, point the "Blueprint file path"
+# field at that path when prompted.
+#
+# After the Blueprint creates the service, fill in every `sync: false`
+# variable below under the service's own Settings → Environment tab in the
+# Render dashboard — never commit real secrets into this file.
+
+services:
+  - type: web
+    name: kitabx-api
+    runtime: node
+    plan: starter
+    region: singapore
+    rootDir: api
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      # ── Safe defaults — same as apps/api/.env.example ──────────────────
+      - key: NODE_ENV
+        value: production
+      - key: API_PREFIX
+        value: api/v1
+      - key: SESSION_COOKIE_NAME
+        value: kitabx_session
+      - key: ADMIN_SESSION_COOKIE_NAME
+        value: kitabx_admin_session
+      - key: JWT_EXPIRES_IN
+        value: 30d
+      - key: SMS_PROVIDER
+        value: console
+      - key: R2_BUCKET_NAME
+        value: kitabx-uploads
+      - key: ADMIN_BOOTSTRAP_EMAIL
+        value: admin@kitabx.app
+
+      # ── Fill in manually on the Render dashboard after the Blueprint runs ──
+      - key: FRONTEND_URL # your deployed Vercel URL, e.g. https://kitabx.vercel.app
+        sync: false
+      - key: DATABASE_URL # Neon Postgres connection string
+        sync: false
+      - key: REDIS_URL # Upstash Redis connection string
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_BOOTSTRAP_PHONE # the one real phone number allowed into the admin console
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: APPLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_BOOKS_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_PUBLIC_URL
+        sync: false
