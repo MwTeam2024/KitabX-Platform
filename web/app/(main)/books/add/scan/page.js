@@ -1,0 +1,170 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Icon from '@/components/ui/Icon';
+import ScreenHeader, { StepProgress } from '@/components/ui/ScreenHeader';
+import { BookCover } from '@/components/books/BookCover';
+import EmptyState from '@/components/ui/EmptyState';
+import { coverForDraft, useBookDraft } from '@/contexts/BookDraftContext';
+import { booksService } from '@/services/books.service';
+import { startScan as startCameraScan } from '@/lib/barcode';
+import { useToast } from '@/components/ui/ToastProvider';
+
+/**
+ * Screen 07 — ISBN barcode scan (§6A). The camera + barcode library live in
+ * `lib/barcode.js`; the resolved ISBN is looked up through NestJS → Google Books
+ * so the API key never reaches the browser.
+ */
+export default function ScanIsbnPage() {
+  const router = useRouter();
+  const showToast = useToast();
+  const { patchDraft } = useBookDraft();
+  const [state, setState] = useState('idle'); // idle | scanning | looking-up | match | notfound
+  const [match, setMatch] = useState(null);
+  const videoRef = useRef(null);
+  const stopScanRef = useRef(null);
+
+  useEffect(() => () => stopScanRef.current?.(), []);
+
+  const lookupIsbn = async (rawText) => {
+    stopScanRef.current?.();
+    setState('looking-up');
+    const isbn = rawText.replace(/[^0-9Xx]/g, '');
+    try {
+      const result = await booksService.lookupByIsbn(isbn);
+      if (!result) return setState('notfound');
+      setMatch(result);
+      setState('match');
+    } catch {
+      setState('notfound');
+    }
+  };
+
+  const startScan = () => {
+    setState('scanning');
+  };
+
+  useEffect(() => {
+    if (state !== 'scanning' || !videoRef.current) return undefined;
+    stopScanRef.current = startCameraScan(
+      videoRef.current,
+      (text) => lookupIsbn(text),
+      () => {
+        showToast('Could not access the camera — check permissions or enter details manually');
+        setState('idle');
+      },
+    );
+    return () => stopScanRef.current?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  const useMatch = () => {
+    patchDraft({
+      title: match.title,
+      author: match.author,
+      genre: match.genre || 'Fiction',
+      isbn: match.isbn13 || match.isbn10 || '',
+      year: match.publicationYear ? String(match.publicationYear) : '',
+    });
+    router.push('/books/add/details');
+  };
+
+  return (
+    <>
+      <ScreenHeader back backHref="/books/add">
+        <StepProgress label="Step 2 of 3 — Scan barcode" percent={66} />
+      </ScreenHeader>
+
+      <div className="app-scroll pad-nav" style={{ padding: '20px 16px' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 21, fontWeight: 700, marginBottom: 14 }}>
+          Scan ISBN barcode
+        </div>
+
+        {state === 'idle' && (
+          <>
+            <button
+              style={{
+                background: 'linear-gradient(160deg,#1B5E37,var(--brand-deep))',
+                borderRadius: 16, padding: '44px 16px', textAlign: 'center', color: '#fff',
+                marginBottom: 18, width: '100%', border: 'none',
+              }}
+              onClick={startScan}
+            >
+              <div style={{ fontSize: 34, marginBottom: 10 }}>📷</div>
+              <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.8)' }}>Tap to open camera</div>
+            </button>
+            <button className="btn btn-outline" style={{ marginBottom: 10 }} onClick={() => router.push('/books/add/details')}>
+              Enter manually instead
+            </button>
+            <button className="btn btn-outline" onClick={() => router.push('/books/add')}>
+              <Icon name="arrowLeft" style={{ width: 14, height: 14 }} />Back
+            </button>
+          </>
+        )}
+
+        {state === 'scanning' && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ position: 'relative', borderRadius: 16, overflow: 'hidden', background: '#000', marginBottom: 14 }}>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', display: 'block' }} />
+              <div
+                style={{
+                  position: 'absolute', inset: '30% 12%', border: '2px solid var(--gold)', borderRadius: 10,
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+            <div style={{ fontWeight: 700 }}>Point the camera at the barcode</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4, marginBottom: 14 }}>
+              Usually on the back cover
+            </div>
+            <button className="btn btn-outline" onClick={() => setState('idle')}>Cancel</button>
+          </div>
+        )}
+
+        {state === 'looking-up' && (
+          <div style={{ textAlign: 'center', padding: '56px 10px 30px' }}>
+            <div className="bulk-spinner" />
+            <div style={{ fontWeight: 700, marginTop: 20 }}>Looking up that ISBN…</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4 }}>
+              Checking the book database
+            </div>
+          </div>
+        )}
+
+        {state === 'match' && match && (
+          <>
+            <div className="card" style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+              <BookCover
+                book={{ ...match, ...coverForDraft({ title: match.title, author: match.author, genre: match.genre }) }}
+                style={{ width: 60, aspectRatio: '2/3', flexShrink: 0 }}
+              />
+              <div>
+                <b style={{ fontSize: 14 }}>{match.title}</b>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '2px 0 6px' }}>
+                  {match.author} · {match.publisher}
+                </div>
+                <span className="status-pill st-avail">Match found ✓</span>
+              </div>
+            </div>
+            <button className="btn btn-primary" onClick={useMatch}>Continue</button>
+          </>
+        )}
+
+        {state === 'notfound' && (
+          <EmptyState
+            icon="🔎"
+            title="No match for that ISBN."
+            hint="You can still add the book by typing the details yourself."
+            action={
+              <button className="btn btn-primary" onClick={() => router.push('/books/add/details')}>
+                Enter details manually
+              </button>
+            }
+          />
+        )}
+      </div>
+    </>
+  );
+}

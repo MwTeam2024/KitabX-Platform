@@ -1,0 +1,33 @@
+'use client';
+
+import AppFrame from '@/components/layout/AppFrame';
+import { useAppData } from '@/contexts/AppDataContext';
+import { useSheet } from '@/components/ui/SheetProvider';
+
+export default function MainLayout({ children }) {
+  const { accountSuspended } = useAppData();
+  const { openSheet } = useSheet();
+
+  return (
+    <AppFrame>
+      {children}
+      {accountSuspended && (
+        <div className="suspended-overlay open">
+          <div className="card" style={{ maxWidth: 320, width: '88%', padding: '32px 26px', textAlign: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 14 }}>🚫</div>
+            <div className="font-display" style={{ fontSize: 19, fontWeight: 700, marginBottom: 8 }}>Account Suspended</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 20 }}>
+              Your account has been suspended by a society admin. Contact support if you think this is a mistake.
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={() => openSheet('Chat with support', <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Our support team typically replies within a few hours. Email support@kitabx.app.</p>)}
+            >
+              Contact Support
+            </button>
+          </div>
+        </div>
+      )}
+    </AppFrame>
+  );
+}

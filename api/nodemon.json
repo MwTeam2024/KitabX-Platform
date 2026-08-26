@@ -1,0 +1,6 @@
+{
+  "watch": ["src", ".env"],
+  "ext": "js,json",
+  "ignore": ["dist", "node_modules"],
+  "exec": "babel-node --config-file ./babel.config.json src/main.js"
+}

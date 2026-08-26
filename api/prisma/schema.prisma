@@ -1,0 +1,718 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+model User {
+  id                  String                      @id @default(uuid())
+  firebaseUid         String?                     @unique @map("firebase_uid")
+  phone               String                      @unique
+  name                String
+  profileImageUrl     String?                     @map("profile_image_url")
+  bio                 String?
+  memberId            String                      @unique @map("member_id")
+  cityId              String?                     @map("city_id")
+  areaId              String?                     @map("area_id")
+  societyId           String?                     @map("society_id")
+  blockId             String?                     @map("block_id")
+  flatUnit            String?                     @map("flat_unit")
+  verificationStatus  VerificationStatus          @default(PENDING) @map("verification_status")
+  isActive            Boolean                     @default(true) @map("is_active")
+  acceptedTermsAt     DateTime?                   @map("accepted_terms_at")
+  deletionRequestedAt DateTime?                   @map("deletion_requested_at")
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  deletedAt           DateTime?                   @map("deleted_at")
+  email               String?                     @unique
+  auditLogEntries     AuditLog[]
+  listings            BookListing[]
+  requestsMade        BookRequest[]               @relation("RequestsMade")
+  conversations       ConversationParticipant[]
+  creditAccount       CreditAccount?
+  creditTransactions  CreditTransaction[]
+  exchangesAsOwner    Exchange[]                  @relation("ExchangeOwner")
+  exchangesAsReceiver Exchange[]                  @relation("ExchangeReceiver")
+  messageReads        MessageRead[]
+  messagesSent        Message[]
+  notifications       Notification[]
+  pickupProposals     PickupSchedule[]
+  ratingsReceived     Rating[]                    @relation("RatedUser")
+  ratingsGiven        Rating[]                    @relation("RaterUser")
+  reportsAgainst      Report[]                    @relation("ReportedUser")
+  reportsFiled        Report[]                    @relation("Reporter")
+  supportRequests     SupportRequest[]
+  blockedBy           UserBlock[]                 @relation("BlockedUser")
+  blocksMade          UserBlock[]                 @relation("Blocker")
+  devices             UserDevice[]
+  notificationPrefs   UserNotificationPreference?
+  verifications       UserVerification[]
+  area                Area?                       @relation(fields: [areaId], references: [id])
+  block               SocietyBlock?               @relation(fields: [blockId], references: [id])
+  city                City?                       @relation(fields: [cityId], references: [id])
+  society             Society?                    @relation(fields: [societyId], references: [id])
+  wishlist            Wishlist[]
+
+  @@index([societyId])
+  @@map("users")
+}
+
+model UserDevice {
+  id                   String                 @id @default(uuid())
+  userId               String                 @map("user_id")
+  fcmToken             String                 @map("fcm_token")
+  platform             String
+  browser              String?
+  isActive             Boolean                @default(true) @map("is_active")
+  lastSeenAt           DateTime               @default(now()) @map("last_seen_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  notificationDelivery NotificationDelivery[]
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fcmToken])
+  @@map("user_devices")
+}
+
+model UserNotificationPreference {
+  id                  String   @id @default(uuid())
+  userId              String   @unique @map("user_id")
+  verificationEnabled Boolean  @default(true) @map("verification_enabled")
+  requestEnabled      Boolean  @default(true) @map("request_enabled")
+  messageEnabled      Boolean  @default(true) @map("message_enabled")
+  pickupEnabled       Boolean  @default(true) @map("pickup_enabled")
+  wishlistEnabled     Boolean  @default(true) @map("wishlist_enabled")
+  reportEnabled       Boolean  @default(true) @map("report_enabled")
+  pushEnabled         Boolean  @default(true) @map("push_enabled")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  chatRetentionMonths Int?     @map("chat_retention_months")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_preferences")
+}
+
+model UserVerification {
+  id         String             @id @default(uuid())
+  userId     String             @map("user_id")
+  status     VerificationStatus
+  verifiedAt DateTime?          @map("verified_at")
+  verifiedBy String?            @map("verified_by")
+  reason     String?
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_verifications")
+}
+
+model City {
+  id        String   @id @default(uuid())
+  name      String
+  state     String?
+  country   String   @default("India")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  areas     Area[]
+  users     User[]
+
+  @@map("cities")
+}
+
+model Area {
+  id        String    @id @default(uuid())
+  cityId    String    @map("city_id")
+  name      String
+  isActive  Boolean   @default(true) @map("is_active")
+  city      City      @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  societies Society[]
+  users     User[]
+
+  @@index([cityId])
+  @@map("areas")
+}
+
+model Society {
+  id           String                    @id @default(uuid())
+  areaId       String                    @map("area_id")
+  name         String
+  address      String?
+  latitude     Float?
+  longitude    Float?
+  isActive     Boolean                   @default(true) @map("is_active")
+  createdAt    DateTime                  @default(now()) @map("created_at")
+  updatedAt    DateTime                  @updatedAt @map("updated_at")
+  location     Unsupported("geography")?
+  listings     BookListing[]             @relation("ListingSociety")
+  area         Area                      @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  blocks       SocietyBlock[]
+  pickupPoints SocietyPickupPoint[]
+  users        User[]
+
+  @@index([areaId])
+  @@index([location], map: "societies_location_gist_idx", type: Gist)
+  @@map("societies")
+}
+
+model SocietyBlock {
+  id        String  @id @default(uuid())
+  societyId String  @map("society_id")
+  name      String
+  society   Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  users     User[]
+
+  @@index([societyId])
+  @@map("society_blocks")
+}
+
+model SocietyPickupPoint {
+  id              String                    @id @default(uuid())
+  societyId       String                    @map("society_id")
+  name            String
+  type            String                    @default("CUSTOM")
+  isActive        Boolean                   @default(true) @map("is_active")
+  latitude        Float?
+  location        Unsupported("geography")?
+  longitude       Float?
+  pickupSchedules PickupSchedule[]
+  society         Society                   @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@index([location], map: "society_pickup_points_location_gist_idx", type: Gist)
+  @@map("society_pickup_points")
+}
+
+model Book {
+  id              String        @id @default(uuid())
+  isbn13          String?       @unique
+  isbn10          String?       @unique
+  title           String
+  subtitle        String?
+  description     String?
+  author          String
+  genre           String?
+  languageCode    String?       @map("language_code")
+  publisher       String?
+  publicationYear Int?          @map("publication_year")
+  edition         String?
+  coverImageUrl   String?       @map("cover_image_url")
+  pageCount       Int?          @map("page_count")
+  googleBooksId   String?       @map("google_books_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  listings        BookListing[]
+  wishlists       Wishlist[]
+
+  @@index([title])
+  @@map("books")
+}
+
+model BookListing {
+  id                   String             @id @default(uuid())
+  bookId               String             @map("book_id")
+  ownerId              String             @map("owner_id")
+  societyId            String             @map("society_id")
+  condition            String
+  conditionDescription String?            @map("condition_description")
+  pickupInstructions   String?            @map("pickup_instructions")
+  status               ListingStatus      @default(ACTIVE)
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  publishedAt          DateTime?          @map("published_at")
+  pausedAt             DateTime?          @map("paused_at")
+  removedAt            DateTime?          @map("removed_at")
+  book                 Book               @relation(fields: [bookId], references: [id])
+  owner                User               @relation(fields: [ownerId], references: [id])
+  society              Society            @relation("ListingSociety", fields: [societyId], references: [id])
+  photos               BookListingPhoto[]
+  requests             BookRequest[]
+  exchanges            Exchange[]
+  reports              Report[]
+
+  @@index([ownerId])
+  @@index([bookId])
+  @@index([status])
+  @@index([societyId])
+  @@map("book_listing")
+}
+
+model BookListingPhoto {
+  id        String           @id @default(uuid())
+  listingId String           @map("listing_id")
+  imageUrl  String           @map("image_url")
+  imageType ListingPhotoType @default(OTHER) @map("image_type")
+  sortOrder Int              @default(0) @map("sort_order")
+  createdAt DateTime         @default(now()) @map("created_at")
+  listing   BookListing      @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("book_listing_photos")
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  bookId    String   @map("book_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId])
+  @@map("wishlists")
+}
+
+model CreditAccount {
+  id               String   @id @default(uuid())
+  userId           String   @unique @map("user_id")
+  availableBalance Int      @default(0) @map("available_balance")
+  pendingBalance   Int      @default(0) @map("pending_balance")
+  reservedBalance  Int      @default(0) @map("reserved_balance")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("credit_accounts")
+}
+
+model CreditTransaction {
+  id            String                  @id @default(uuid())
+  userId        String                  @map("user_id")
+  type          CreditTransactionType
+  amount        Int
+  status        CreditTransactionStatus @default(COMPLETED)
+  referenceType String?                 @map("reference_type")
+  referenceId   String?                 @map("reference_id")
+  description   String?
+  createdAt     DateTime                @default(now()) @map("created_at")
+  hiddenAt      DateTime?               @map("hidden_at")
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("credit_transactions")
+}
+
+model BookRequest {
+  id                 String          @id @default(uuid())
+  listingId          String          @map("listing_id")
+  requesterId        String          @map("requester_id")
+  status             RequestStatus   @default(REQUESTED)
+  requestedAt        DateTime        @default(now()) @map("requested_at")
+  acceptedAt         DateTime?       @map("accepted_at")
+  declinedAt         DateTime?       @map("declined_at")
+  cancelledAt        DateTime?       @map("cancelled_at")
+  expiredAt          DateTime?       @map("expired_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  cancellationReason String?         @map("cancellation_reason")
+  listing            BookListing     @relation(fields: [listingId], references: [id])
+  requester          User            @relation("RequestsMade", fields: [requesterId], references: [id])
+  conversation       Conversation?
+  exchange           Exchange?
+  pickup             PickupSchedule?
+
+  @@index([listingId])
+  @@index([requesterId])
+  @@index([status])
+  @@map("book_requests")
+}
+
+model PickupSchedule {
+  id                     String              @id @default(uuid())
+  requestId              String              @unique @map("request_id")
+  proposedById           String              @map("proposed_by")
+  pickupDate             String              @map("pickup_date")
+  timeSlot               String              @map("time_slot")
+  pickupPointId          String?             @map("pickup_point_id")
+  customLocation         String?             @map("custom_location")
+  instructions           String?
+  status                 PickupStatus        @default(PROPOSED)
+  confirmedByRequesterAt DateTime?           @map("confirmed_by_requester_at")
+  confirmedByOwnerAt     DateTime?           @map("confirmed_by_owner_at")
+  rescheduleCount        Int                 @default(0) @map("reschedule_count")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+  pickupPoint            SocietyPickupPoint? @relation(fields: [pickupPointId], references: [id])
+  proposedBy             User                @relation(fields: [proposedById], references: [id])
+  request                BookRequest         @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("pickup_schedules")
+}
+
+model Exchange {
+  id          String         @id @default(uuid())
+  requestId   String         @unique @map("request_id")
+  ownerId     String         @map("owner_id")
+  receiverId  String         @map("receiver_id")
+  listingId   String         @map("listing_id")
+  status      ExchangeStatus @default(ACTIVE)
+  completedAt DateTime?      @map("completed_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  listing     BookListing    @relation(fields: [listingId], references: [id])
+  owner       User           @relation("ExchangeOwner", fields: [ownerId], references: [id])
+  receiver    User           @relation("ExchangeReceiver", fields: [receiverId], references: [id])
+  request     BookRequest    @relation(fields: [requestId], references: [id])
+  handoverOtp HandoverOtp?
+  ratings     Rating[]
+  reports     Report[]
+
+  @@index([ownerId])
+  @@index([receiverId])
+  @@map("exchanges")
+}
+
+model HandoverOtp {
+  id           String    @id @default(uuid())
+  exchangeId   String    @unique @map("exchange_id")
+  otpHash      String    @map("otp_hash")
+  expiresAt    DateTime  @map("expires_at")
+  verifiedAt   DateTime? @map("verified_at")
+  attemptCount Int       @default(0) @map("attempt_count")
+  isUsed       Boolean   @default(false) @map("is_used")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  exchange     Exchange  @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+
+  @@map("handover_otps")
+}
+
+model Conversation {
+  id           String                    @id @default(uuid())
+  requestId    String                    @unique @map("request_id")
+  status       ConversationStatus        @default(ACTIVE)
+  disabledAt   DateTime?                 @map("disabled_at")
+  createdAt    DateTime                  @default(now()) @map("created_at")
+  updatedAt    DateTime                  @updatedAt @map("updated_at")
+  participants ConversationParticipant[]
+  request      BookRequest               @relation(fields: [requestId], references: [id])
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String       @map("conversation_id")
+  userId         String       @map("user_id")
+  joinedAt       DateTime     @default(now()) @map("joined_at")
+  deletedAt      DateTime?    @map("deleted_at")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  conversationId String        @map("conversation_id")
+  senderId       String?       @map("sender_id")
+  messageType    MessageType   @default(TEXT) @map("message_type")
+  content        String
+  createdAt      DateTime      @default(now()) @map("created_at")
+  deletedAt      DateTime?     @map("deleted_at")
+  reads          MessageRead[]
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User?         @relation(fields: [senderId], references: [id])
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+model MessageRead {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  readAt    DateTime @default(now()) @map("read_at")
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_reads")
+}
+
+model Notification {
+  id         String                 @id @default(uuid())
+  userId     String                 @map("user_id")
+  type       String
+  title      String
+  body       String
+  entityType String?                @map("entity_type")
+  entityId   String?                @map("entity_id")
+  isRead     Boolean                @default(false) @map("is_read")
+  readAt     DateTime?              @map("read_at")
+  createdAt  DateTime               @default(now()) @map("created_at")
+  deliveries NotificationDelivery[]
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model NotificationDelivery {
+  id             String       @id @default(uuid())
+  notificationId String       @map("notification_id")
+  deviceId       String?      @map("device_id")
+  provider       String
+  status         String
+  sentAt         DateTime?    @map("sent_at")
+  deliveredAt    DateTime?    @map("delivered_at")
+  failedAt       DateTime?    @map("failed_at")
+  errorCode      String?      @map("error_code")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  device         UserDevice?  @relation(fields: [deviceId], references: [id])
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@map("notification_deliveries")
+}
+
+model Rating {
+  id                String   @id @default(uuid())
+  exchangeId        String   @map("exchange_id")
+  raterId           String   @map("rater_id")
+  ratedUserId       String   @map("rated_user_id")
+  conditionAccuracy Int      @map("condition_accuracy")
+  communication     Int
+  reliability       Int
+  review            String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  exchange          Exchange @relation(fields: [exchangeId], references: [id])
+  ratedUser         User     @relation("RatedUser", fields: [ratedUserId], references: [id])
+  rater             User     @relation("RaterUser", fields: [raterId], references: [id])
+
+  @@unique([exchangeId, raterId])
+  @@map("ratings")
+}
+
+model Report {
+  id              String             @id @default(uuid())
+  reporterId      String             @map("reporter_id")
+  reportedUserId  String?            @map("reported_user_id")
+  listingId       String?            @map("listing_id")
+  exchangeId      String?            @map("exchange_id")
+  reason          ReportReason
+  description     String?
+  status          ReportStatus       @default(OPEN)
+  resolutionNotes String?            @map("resolution_notes")
+  resolvedById    String?            @map("resolved_by")
+  resolvedAt      DateTime?          @map("resolved_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  attachments     ReportAttachment[]
+  exchange        Exchange?          @relation(fields: [exchangeId], references: [id])
+  listing         BookListing?       @relation(fields: [listingId], references: [id])
+  reportedUser    User?              @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  reporter        User               @relation("Reporter", fields: [reporterId], references: [id])
+  resolvedBy      AdminUser?         @relation(fields: [resolvedById], references: [id])
+
+  @@index([status])
+  @@index([reportedUserId])
+  @@map("reports")
+}
+
+model ReportAttachment {
+  id        String   @id @default(uuid())
+  reportId  String   @map("report_id")
+  fileUrl   String   @map("file_url")
+  fileType  String   @map("file_type")
+  createdAt DateTime @default(now()) @map("created_at")
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("report_attachments")
+}
+
+model UserBlock {
+  id            String   @id @default(uuid())
+  blockerId     String   @map("blocker_id")
+  blockedUserId String   @map("blocked_user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  blockedUser   User     @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+  blocker       User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedUserId])
+  @@map("user_blocks")
+}
+
+model SupportRequest {
+  id          String               @id @default(uuid())
+  userId      String               @map("user_id")
+  type        SupportRequestType   @default(SUPPORT)
+  subject     String?
+  description String
+  status      SupportRequestStatus @default(OPEN)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("support_requests")
+}
+
+model AdminUser {
+  id              String       @id @default(uuid())
+  email           String?      @unique
+  name            String?
+  role            AdminRole    @default(ADMIN)
+  isActive        Boolean      @default(true) @map("is_active")
+  lastLoginAt     DateTime?    @map("last_login_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  phone           String       @unique
+  settingsUpdated AppSetting[]
+  resolvedReports Report[]
+
+  @@map("admin_users")
+}
+
+model AppSetting {
+  id          String     @id @default(uuid())
+  key         String     @unique
+  value       String
+  updatedById String?    @map("updated_by")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  updatedBy   AdminUser? @relation(fields: [updatedById], references: [id])
+
+  @@map("app_settings")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorUserId  String?  @map("actor_user_id")
+  actorAdminId String?  @map("actor_admin_id")
+  action       String
+  entityType   String   @map("entity_type")
+  entityId     String   @map("entity_id")
+  oldData      Json?    @map("old_data")
+  newData      Json?    @map("new_data")
+  ipAddress    String?  @map("ip_address")
+  createdAt    DateTime @default(now()) @map("created_at")
+  actorUser    User?    @relation(fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  RESERVED
+  COMPLETED
+  REMOVED
+}
+
+enum ListingPhotoType {
+  COVER
+  ACTUAL_CONDITION
+  OTHER
+}
+
+enum CreditTransactionType {
+  BOOK_LISTED
+  BOOK_GIVEN
+  REQUEST_RESERVED
+  REQUEST_CANCELLED
+  REQUEST_EXPIRED
+  EXCHANGE_COMPLETED
+  ADMIN_ADJUSTMENT
+}
+
+enum CreditTransactionStatus {
+  PENDING
+  COMPLETED
+  REVERSED
+}
+
+enum RequestStatus {
+  REQUESTED
+  ACCEPTED
+  PICKUP_SCHEDULED
+  COMPLETED
+  DECLINED
+  CANCELLED
+  EXPIRED
+  DISPUTED
+}
+
+enum PickupStatus {
+  PROPOSED
+  CONFIRMED
+  RESCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+enum ExchangeStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum ConversationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+  QUICK_REPLY
+}
+
+enum ReportReason {
+  FAKE_DUPLICATE_LISTING
+  INCORRECT_CONDITION
+  INAPPROPRIATE_CONTENT
+  HARASSMENT
+  NO_RESPONSE_NO_SHOW
+  CREDIT_PROBLEM
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+}
+
+enum SupportRequestType {
+  SUPPORT
+  TECHNICAL_BUG
+  ACCOUNT
+  OTHER
+}
+
+enum SupportRequestStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+}

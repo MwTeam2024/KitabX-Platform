@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+prisma/migrations/**/migration_lock.toml.bak
+storage/local-uploads/
