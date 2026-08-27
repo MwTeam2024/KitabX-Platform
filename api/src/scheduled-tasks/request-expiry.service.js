@@ -2,7 +2,8 @@ import { Dependencies, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { ChatService } from '../chat/chat.service';
+// Chat is switched off for now — see chat.module.js.
+// import { ChatService } from '../chat/chat.service';
 import { releaseReservedCredit } from '../credits/credits.tx';
 
 // DB doc §17-18: a REQUESTED request that never gets a response should
@@ -16,13 +17,13 @@ const REQUEST_EXPIRY_HOURS = 48;
  * listing itself is reserved and the two members are expected to coordinate
  * directly rather than have the system silently unwind an agreed exchange.
  */
-@Dependencies(PrismaService, NotificationsService, ChatService)
+@Dependencies(PrismaService, NotificationsService /* , ChatService */)
 @Injectable()
 export class RequestExpiryService {
-  constructor(prisma, notifications, chat) {
+  constructor(prisma, notifications /* , chat */) {
     this.prisma = prisma;
     this.notifications = notifications;
-    this.chat = chat;
+    // this.chat = chat;
     this.logger = new Logger(RequestExpiryService.name);
   }
 
@@ -62,7 +63,8 @@ export class RequestExpiryService {
             entityId: request.id,
           });
         });
-        await this.chat.disableForRequest(request.id).catch(() => {});
+        // Chat is switched off for now — see chat.module.js.
+        // await this.chat.disableForRequest(request.id).catch(() => {});
       } catch (err) {
         this.logger.error(`Failed to expire request ${request.id}: ${err.message}`);
       }

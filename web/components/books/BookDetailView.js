@@ -23,8 +23,8 @@ export default function BookDetailView({ bookKey }) {
   const router = useRouter();
   const showToast = useToast();
   const {
-    books, exchanges, requestedKeys, getOwnerProfile,
-    requestBook, cancelBookRequest, togglePauseListing, removeListing, openThreadForExchange,
+    books, requestedKeys, getOwnerProfile,
+    requestBook, cancelBookRequest, togglePauseListing, removeListing,
   } = useAppData();
   const { trustProfile, reportListing } = useAppSheets();
 
@@ -68,13 +68,18 @@ export default function BookDetailView({ bookKey }) {
     router.push('/exchanges?tab=mine');
   };
 
-  const onMessage = async () => {
-    const mineExchange = exchanges.find((e) => e.bookKey === bookKey && e.role === 'receiver');
-    if (!mineExchange) return showToast('Chat opens once your request is sent');
-    const threadId = await openThreadForExchange(mineExchange.id);
-    if (!threadId) return showToast('Conversation not available yet');
-    router.push(`/chat/${threadId}`);
-  };
+  // Chat is switched off for now (see chat.module.js) — this used to open a
+  // conversation with the owner from here. There's no "accepted" gate
+  // available at this point in the flow (only after a request exists and is
+  // accepted does the WhatsApp contact button appear, on the exchange detail
+  // page instead — see ExchangePartnerCard.js), so nothing replaces it here.
+  // const onMessage = async () => {
+  //   const mineExchange = exchanges.find((e) => e.bookKey === bookKey && e.role === 'receiver');
+  //   if (!mineExchange) return showToast('Chat opens once your request is sent');
+  //   const threadId = await openThreadForExchange(mineExchange.id);
+  //   if (!threadId) return showToast('Conversation not available yet');
+  //   router.push(`/chat/${threadId}`);
+  // };
 
   const onRemove = async () => {
     try {
@@ -243,9 +248,7 @@ export default function BookDetailView({ bookKey }) {
           </>
         ) : requested ? (
           <>
-            <button className="btn btn-outline" onClick={onMessage}>
-              <Icon name="messageCircle" style={{ width: 15, height: 15 }} />Message
-            </button>
+            {/* Message button on hold along with onMessage above — see the note there. */}
             <button
               className="btn btn-danger-solid"
               onClick={async () => {
@@ -262,9 +265,7 @@ export default function BookDetailView({ bookKey }) {
           </>
         ) : (
           <>
-            <button className="btn btn-outline" onClick={onMessage}>
-              <Icon name="messageCircle" style={{ width: 15, height: 15 }} />Message
-            </button>
+            {/* Message button on hold along with onMessage above — see the note there. */}
             <button className="btn btn-primary" onClick={onRequest}>🤝 Request this book</button>
           </>
         )}

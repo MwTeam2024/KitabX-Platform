@@ -22,7 +22,11 @@ import { HandoverModule } from './handover/handover.module';
 import { ExchangesModule } from './exchanges/exchanges.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { ReportsModule } from './reports/reports.module';
-import { ChatModule } from './chat/chat.module';
+// Chat is switched off for now — WhatsApp deep-links replace it between an
+// accepted request's two parties (see exchanges.service.js / ExchangePartnerCard.js).
+// Not deleted: uncomment this + every other commented `ChatModule`/`ChatService`
+// reference (requests, handover, scheduled-tasks, notifications) to bring it back.
+// import { ChatModule } from './chat/chat.module';
 import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health/health.controller';
 
@@ -50,7 +54,7 @@ import { HealthController } from './health/health.controller';
     ExchangesModule,
     RatingsModule,
     ReportsModule,
-    ChatModule,
+    // ChatModule,
     AdminModule,
     ScheduledTasksModule,
   ],

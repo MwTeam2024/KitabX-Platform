@@ -1,22 +1,21 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import Icon from '@/components/ui/Icon';
 import { BookCover } from '@/components/books/BookCover';
-import { useAppData } from '@/contexts/AppDataContext';
-import { useToast } from '@/components/ui/ToastProvider';
 
-/** Book + partner summary with the chat shortcut required by §14. */
+/**
+ * Book + partner summary. Chat (§14) is switched off for now — see
+ * chat.module.js — so this shows a WhatsApp deep-link instead once the
+ * owner has accepted the request (`exchange.otherPhone` is only ever
+ * populated by the backend from that point on, same gating as the exact
+ * address elsewhere). Not commented out: `openThreadForExchange` is still
+ * exported from AppDataContext for when chat comes back — this component's
+ * old chat-button version is what actually used it.
+ */
 export default function ExchangePartnerCard({ exchange }) {
-  const router = useRouter();
-  const showToast = useToast();
-  const { openThreadForExchange } = useAppData();
-
-  const openChat = async () => {
-    const threadId = await openThreadForExchange(exchange.id);
-    if (!threadId) return showToast('Conversation not available yet');
-    router.push(`/chat/${threadId}`);
-  };
+  const waLink = exchange.otherPhone
+    ? `https://wa.me/${exchange.otherPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi, about "${exchange.bookTitle}" on KitabX`)}`
+    : null;
 
   return (
     <div className="exch-mini" style={{ marginBottom: 16 }}>
@@ -32,14 +31,18 @@ export default function ExchangePartnerCard({ exchange }) {
           <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{exchange.name}</span>
         </div>
       </div>
-      <button
-        className="circle-btn"
-        style={{ background: 'var(--mint)', color: 'var(--brand-2)' }}
-        onClick={openChat}
-        aria-label={`Message ${exchange.name}`}
-      >
-        <Icon name="messageCircle" style={{ width: 16, height: 16 }} />
-      </button>
+      {waLink && (
+        <a
+          className="circle-btn"
+          style={{ background: 'var(--mint)', color: 'var(--brand-2)' }}
+          href={waLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`WhatsApp ${exchange.name}`}
+        >
+          <Icon name="whatsapp" style={{ width: 16, height: 16 }} />
+        </a>
+      )}
     </div>
   );
 }

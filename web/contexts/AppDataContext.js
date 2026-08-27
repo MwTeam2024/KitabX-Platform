@@ -375,7 +375,9 @@ export function AppDataProvider({ children }) {
     refreshCredits().catch(() => {});
     refreshWishlist().catch(() => {});
     refreshExchanges().catch(() => {});
-    refreshChatThreads().catch(() => {});
+    // Chat is switched off for now (see chat.module.js) — this would just
+    // 404 against the now-unregistered chat endpoints.
+    // refreshChatThreads().catch(() => {});
     dispatch(fetchNotifications());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUser?.id]);
@@ -402,12 +404,12 @@ export function AppDataProvider({ children }) {
 
     const onLiveUpdate = () => {
       refreshExchanges().catch(() => {});
-      refreshChatThreads().catch(() => {});
+      // refreshChatThreads().catch(() => {}); // chat switched off — see chat.module.js
       dispatch(fetchNotifications());
     };
     socket.on('notification:new', onLiveUpdate);
     return () => socket.off('notification:new', onLiveUpdate);
-  }, [sessionUser?.id, refreshExchanges, refreshChatThreads, dispatch]);
+  }, [sessionUser?.id, refreshExchanges, dispatch]);
 
   // §16/§35: the socket push above now delivers the common case near-
   // instantly — this interval is just the safety net for a dropped/still-
@@ -416,7 +418,7 @@ export function AppDataProvider({ children }) {
   // worst case a user actually notices.
   useInterval(() => {
     refreshExchanges().catch(() => {});
-    refreshChatThreads().catch(() => {});
+    // refreshChatThreads().catch(() => {}); // chat switched off — see chat.module.js
     dispatch(fetchNotifications());
   }, 45000, { enabled: !!sessionUser?.id });
 

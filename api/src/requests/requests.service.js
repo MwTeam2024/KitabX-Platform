@@ -10,7 +10,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { reserveCredit, releaseReservedCredit } from '../credits/credits.tx';
 import { toPublicUser } from '../common/serializers/user.serializer';
-import { ChatService } from '../chat/chat.service';
+// Chat is switched off for now — see chat.module.js.
+// import { ChatService } from '../chat/chat.service';
 import { ReportsService } from '../reports/reports.service';
 
 const ACTIVE_REQUEST_STATUSES = ['REQUESTED', 'ACCEPTED', 'PICKUP_SCHEDULED'];
@@ -27,13 +28,13 @@ const ACTIVE_REQUEST_STATUSES = ['REQUESTED', 'ACCEPTED', 'PICKUP_SCHEDULED'];
  * accepts one of the pending requests on it; duplicate-request prevention
  * (below) is what stops the same member spamming the same listing meanwhile.
  */
-@Dependencies(PrismaService, NotificationsService, ChatService, ReportsService)
+@Dependencies(PrismaService, NotificationsService, /* ChatService, */ ReportsService)
 @Injectable()
 export class RequestsService {
-  constructor(prisma, notifications, chat, reports) {
+  constructor(prisma, notifications, /* chat, */ reports) {
     this.prisma = prisma;
     this.notifications = notifications;
-    this.chat = chat;
+    // this.chat = chat;
     this.reports = reports;
   }
 
@@ -68,15 +69,16 @@ export class RequestsService {
         ownerName: listing.owner.name,
       });
 
-      // Chat is request-linked (§14/Module 11); creating it here means the
-      // "Message" action is available for the whole lifetime of the request.
-      const conversation = await tx.conversation.create({ data: { requestId: request.id } });
-      await tx.conversationParticipant.createMany({
-        data: [
-          { conversationId: conversation.id, userId: requesterId },
-          { conversationId: conversation.id, userId: listing.ownerId },
-        ],
-      });
+      // Chat is switched off for now (see chat.module.js) — this used to
+      // create a request-linked Conversation here so the "Message" action
+      // was available for the whole lifetime of the request.
+      // const conversation = await tx.conversation.create({ data: { requestId: request.id } });
+      // await tx.conversationParticipant.createMany({
+      //   data: [
+      //     { conversationId: conversation.id, userId: requesterId },
+      //     { conversationId: conversation.id, userId: listing.ownerId },
+      //   ],
+      // });
 
       await this.notifications.create(tx, {
         userId: listing.ownerId,
@@ -155,7 +157,7 @@ export class RequestsService {
         title: 'Request accepted!',
         body: `Your request for "${request.listing.book.title}" was accepted — schedule a pickup.`,
         entityType: 'exchange',
-        entityId: exchange.id,
+        entityId: request.id,
       });
 
       return { request: updatedRequest, exchange };
@@ -186,7 +188,8 @@ export class RequestsService {
       });
       return { success: true };
     });
-    await this.chat.disableForRequest(requestId).catch(() => {});
+    // Chat is switched off for now — see chat.module.js.
+    // await this.chat.disableForRequest(requestId).catch(() => {});
     return result;
   }
 
@@ -233,7 +236,8 @@ export class RequestsService {
       });
       return { success: true };
     });
-    await this.chat.disableForRequest(requestId).catch(() => {});
+    // Chat is switched off for now — see chat.module.js.
+    // await this.chat.disableForRequest(requestId).catch(() => {});
     return result;
   }
 

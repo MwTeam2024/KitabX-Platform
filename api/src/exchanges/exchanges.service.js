@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 // `owner`/`requester` — narrowed from `include: true` (the full User row,
 // every column) since this include is used by all 4 list-tab queries *and*
 // the detail query, on every poll tick.
-const OTHER_PARTY_SELECT = { id: true, name: true };
+const OTHER_PARTY_SELECT = { id: true, name: true, phone: true };
 const REQUEST_INCLUDE = {
   listing: { include: { book: true, owner: { select: OTHER_PARTY_SELECT }, photos: { orderBy: { sortOrder: 'asc' } } } },
   requester: { select: OTHER_PARTY_SELECT },
@@ -129,6 +129,14 @@ export class ExchangesService {
     return 'requested';
   }
 
+  /** Chat is switched off for now (see chat.module.js) — WhatsApp is the
+   * stand-in contact channel between the two parties, but (like the exact
+   * address in toListingLocation) only once the owner has actually
+   * accepted; REQUESTED/DECLINED/EXPIRED all happen before that. */
+  _wasAccepted(request) {
+    return !['REQUESTED', 'DECLINED', 'EXPIRED'].includes(request.status);
+  }
+
   _toCard(request, viewerId, exchangeOverride) {
     const { other, role } = this._otherParty(request, viewerId);
     const exchange = exchangeOverride || request.exchange;
@@ -141,6 +149,10 @@ export class ExchangesService {
       otherUserId: other.id,
       initials: initialsOf(other.name),
       name: other.name,
+      // Same shape as _toDetail's `otherPhone`, same reason as the `pickup`
+      // comment below — a background poll must never regress an
+      // already-revealed WhatsApp number back to hidden.
+      otherPhone: this._wasAccepted(request) ? other.phone : null,
       bookKey: request.listingId,
       bookTitle: request.listing.book.title,
       bookAuthor: request.listing.book.author,
@@ -187,6 +199,7 @@ export class ExchangesService {
       otherUserId: other.id,
       initials: initialsOf(other.name),
       name: other.name,
+      otherPhone: this._wasAccepted(request) ? other.phone : null,
       bookKey: request.listingId,
       bookTitle: request.listing.book.title,
       bookAuthor: request.listing.book.author,

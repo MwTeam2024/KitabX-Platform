@@ -3,27 +3,26 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Icon from '@/components/ui/Icon';
-import { useAppData } from '@/contexts/AppDataContext';
 
 const ITEMS = [
   { href: '/home', label: 'Discover', icon: 'bookOpen', cls: 'nav-discover' },
   { href: '/books', label: 'My Shelf', icon: 'layers', cls: 'nav-shelf' },
   { href: '/wishlist', label: 'Wishlist', icon: 'heart', cls: 'nav-wish' },
   { href: '/exchanges', label: 'Exchange', icon: 'exchange', cls: 'nav-exch' },
-  { href: '/chat', label: 'Chat', icon: 'messageCircle', cls: 'nav-chat', showUnread: true },
+  // Chat is switched off for now — see chat.module.js.
+  // { href: '/chat', label: 'Chat', icon: 'messageCircle', cls: 'nav-chat', showUnread: true },
 ];
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { chatThreads } = useAppData();
-
-  const chatUnread = chatThreads.reduce((total, t) => total + (t.unread || 0), 0);
 
   return (
     <nav className="bottomnav">
       {ITEMS.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const count = item.showUnread ? chatUnread : 0;
+        // Was chat's unread count — no nav item sets `showUnread` while
+        // chat's off, so this always resolves to 0 for now.
+        const count = item.showUnread ? item.unreadCount || 0 : 0;
         return (
           <Link key={item.href} href={item.href} className={`nav-btn ${item.cls}${active ? ' on' : ''}`}>
             <span className="nico">

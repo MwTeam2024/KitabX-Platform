@@ -1,7 +1,14 @@
-import { Dependencies, forwardRef, Injectable } from '@nestjs/common';
+import { Dependencies, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FirebaseAdminService } from '../common/firebase/firebase-admin.service';
-import { ChatGateway } from '../chat/chat.gateway';
+import { NotificationsGateway } from './notifications.gateway';
+// Chat is commented out for now (see chat.module.js) — this used to depend
+// on ChatGateway (via forwardRef, since it lived in a module on the other
+// side of a cycle) purely to reuse its connection/auth + emitToUser. That
+// now lives in NotificationsGateway instead, in this same module, so no
+// forwardRef is needed here any more either.
+// import { forwardRef } from '@nestjs/common';
+// import { ChatGateway } from '../chat/chat.gateway';
 
 /**
  * §16: the notifications table is the permanent notification centre; FCM is
@@ -19,7 +26,7 @@ import { ChatGateway } from '../chat/chat.gateway';
  * fire-and-forget treatment as the FCM push right below it — a client with no
  * socket open right now just sees it on their next poll/navigation instead.
  */
-@Dependencies(PrismaService, FirebaseAdminService, forwardRef(() => ChatGateway))
+@Dependencies(PrismaService, FirebaseAdminService, NotificationsGateway)
 @Injectable()
 export class NotificationsService {
   constructor(prisma, firebase, gateway) {

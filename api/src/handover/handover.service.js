@@ -10,7 +10,8 @@ import {
 import crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { ChatService } from '../chat/chat.service';
+// Chat is switched off for now — see chat.module.js.
+// import { ChatService } from '../chat/chat.service';
 import { deductReservedCredit, movePendingToAvailable } from '../credits/credits.tx';
 
 const OTP_TTL_MINUTES = 15;
@@ -26,13 +27,13 @@ function hashCode(code) {
  * completion (exchange, listing, both credit legs, both notifications) is one
  * transaction (§23) so nothing can end up half-updated.
  */
-@Dependencies(PrismaService, NotificationsService, ChatService)
+@Dependencies(PrismaService, NotificationsService /* , ChatService */)
 @Injectable()
 export class HandoverService {
-  constructor(prisma, notifications, chat) {
+  constructor(prisma, notifications /* , chat */) {
     this.prisma = prisma;
     this.notifications = notifications;
-    this.chat = chat;
+    // this.chat = chat;
   }
 
   /** Only the receiver can view/generate the code they'll read out at pickup. */
@@ -103,7 +104,7 @@ export class HandoverService {
         title: 'Handover verified!',
         body: `1 credit is now available — "${exchange.listing.book.title}" is on its way to ${exchange.receiver.name}. You can rate the exchange now.`,
         entityType: 'exchange',
-        entityId: exchangeId,
+        entityId: exchange.requestId,
       });
       await this.notifications.create(tx, {
         userId: exchange.receiverId,
@@ -111,16 +112,17 @@ export class HandoverService {
         title: 'Handover verified!',
         body: `You've received "${exchange.listing.book.title}" from ${exchange.owner.name}. You can rate the exchange now.`,
         entityType: 'exchange',
-        entityId: exchangeId,
+        entityId: exchange.requestId,
       });
 
       return { success: true };
     });
 
-    // Not part of the transaction — this is a UX nicety (closing the
-    // conversation once there's nothing left to arrange), not something that
-    // needs to be atomic with the credit/status changes above.
-    await this.chat.disableForRequest(exchange.requestId).catch(() => {});
+    // Chat is switched off for now — see chat.module.js. This used to close
+    // the conversation (not part of the transaction — a UX nicety, not
+    // something that needed to be atomic with the credit/status changes
+    // above) once there was nothing left to arrange.
+    // await this.chat.disableForRequest(exchange.requestId).catch(() => {});
     return result;
   }
 
