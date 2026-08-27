@@ -22,12 +22,13 @@ export const adminService = {
   requestEmailChangeOtp: (newEmail) => apiClient.post("/admin/auth/email-change/request", { newEmail }),
   confirmEmailChange: (newEmail, code) => apiClient.post("/admin/auth/email-change/verify", { newEmail, code }),
   dashboard: () => apiClient.get("/admin/dashboard"),
-  notificationCounts: ({ usersSince, reportsSince, moderationSince, deletionRequestsSince }) => {
+  notificationCounts: ({ usersSince, reportsSince, moderationSince, deletionRequestsSince, locationRequestsSince }) => {
     const params = new URLSearchParams();
     if (usersSince) params.set("usersSince", usersSince);
     if (reportsSince) params.set("reportsSince", reportsSince);
     if (moderationSince) params.set("moderationSince", moderationSince);
     if (deletionRequestsSince) params.set("deletionRequestsSince", deletionRequestsSince);
+    if (locationRequestsSince) params.set("locationRequestsSince", locationRequestsSince);
     return apiClient.get(`/admin/notification-counts?${params.toString()}`);
   },
 
@@ -45,6 +46,10 @@ export const adminService = {
   createSociety: (payload) => apiClient.post("/admin/societies", payload),
   updateSociety: (id, payload) => apiClient.patch(`/admin/societies/${id}`, payload),
   removeSociety: (id) => apiClient.delete(`/admin/societies/${id}`),
+
+  listLocationRequests: () => apiClient.get("/admin/location-requests"),
+  approveLocationRequest: (id) => apiClient.post(`/admin/location-requests/${id}/approve`),
+  rejectLocationRequest: (id, reason) => apiClient.post(`/admin/location-requests/${id}/reject`, { reason }),
 
   listFlaggedListings: () => apiClient.get("/admin/listings/flagged"),
   removeListing: (id) => apiClient.delete(`/admin/listings/${id}`),

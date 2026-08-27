@@ -2,20 +2,18 @@ import { Controller, Dependencies, Post, UploadedFile, UseGuards, UseInterceptor
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Params } from '../common/decorators/params.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { StorageService } from './storage.service';
+import { CloudinaryService } from './cloudinary.service';
 
 /**
  * Generic authenticated image upload. The frontend calls this once per photo
  * (cover + up to 2 condition photos — 3 total, enforced in listings.service.js
  * when the URLs are attached to a listing) and stores the returned URL.
- * `StorageService` uses Cloudflare R2 when fully configured, otherwise falls
- * back to local disk so uploads always work in dev.
  */
-@Dependencies(StorageService)
+@Dependencies(CloudinaryService)
 @Controller('uploads')
 export class UploadsController {
-  constructor(storage) {
-    this.storage = storage;
+  constructor(cloudinary) {
+    this.cloudinary = cloudinary;
   }
 
   @UseGuards(JwtAuthGuard)
@@ -23,7 +21,7 @@ export class UploadsController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @Params({ 0: UploadedFile() })
   async uploadListingPhoto(file) {
-    const url = await this.storage.uploadImage(file?.buffer, 'listings');
+    const url = await this.cloudinary.uploadImage(file?.buffer, 'listings');
     return { url };
   }
 }

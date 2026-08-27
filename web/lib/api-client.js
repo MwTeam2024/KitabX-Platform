@@ -4,6 +4,8 @@
  * calling `fetch` directly, so auth headers / base URL live in one place.
  */
 
+import { notifyDevOtp } from "@/components/ui/ToastProvider";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 async function request(path, { method = "GET", body, headers, ...rest } = {}) {
@@ -30,7 +32,12 @@ async function request(path, { method = "GET", body, headers, ...rest } = {}) {
     throw error;
   }
   if (res.status === 204) return null;
-  return res.json();
+  const json = await res.json();
+  // Only ever present outside production (see otp.service.js) — surfacing it
+  // here covers every OTP flow (signup, sign-in, admin login, phone/email
+  // change) from one place instead of each screen showing it separately.
+  if (json?.devCode) notifyDevOtp(json.devCode);
+  return json;
 }
 
 export const apiClient = {

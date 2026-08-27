@@ -37,9 +37,11 @@ export default function OnboardingWizard() {
   const patch = (updates) => setForm((f) => ({ ...f, ...updates }));
   const current = STEPS[step];
 
+  const hasLocationRequest = form.locationRequest?.cityName?.trim() && form.locationRequest?.societyName?.trim();
+
   const next = () => {
     if (step === 0 && !form.firstName.trim()) return showToast('Please enter your first name');
-    if (step === 1 && !form.societyId) return showToast('Please select your society');
+    if (step === 1 && !form.societyId && !hasLocationRequest) return showToast('Please select your society, or enter one to request');
     setStep((s) => s + 1);
   };
 
@@ -48,12 +50,17 @@ export default function OnboardingWizard() {
     try {
       const updated = await usersService.updateProfile({
         name: `${form.firstName} ${form.lastName}`.trim(),
-        societyId: form.societyId,
+        societyId: form.societyId || undefined,
         blockId: form.blockId || undefined,
         flatUnit: form.flatUnit || undefined,
+        locationRequest: form.locationRequest || undefined,
       });
       setSession(updated.user);
-      showToast('Profile saved — welcome to KitabX 🌿');
+      showToast(
+        hasLocationRequest
+          ? `Profile saved — your request to add ${form.locationRequest.societyName}, ${form.locationRequest.cityName} has reached the admin`
+          : 'Profile saved — welcome to KitabX 🌿',
+      );
       router.push('/home');
     } catch (err) {
       showToast(err.message || 'Could not save your profile — try again');

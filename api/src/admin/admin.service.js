@@ -5,6 +5,8 @@ import { adminAdjustCredit } from '../credits/credits.tx';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogService } from '../common/audit/audit-log.service';
 import { ReportsService } from '../reports/reports.service';
+import { CloudinaryService } from '../uploads/cloudinary.service';
+import { SocietiesService } from '../societies/societies.service';
 
 const DEFAULT_SETTINGS = {
   supportEmail: 'support@kitabx.app',
@@ -12,14 +14,16 @@ const DEFAULT_SETTINGS = {
 };
 
 /** §21 — the MVP admin console's non-auth, non-society operations. */
-@Dependencies(PrismaService, NotificationsService, AuditLogService, ReportsService)
+@Dependencies(PrismaService, NotificationsService, AuditLogService, ReportsService, CloudinaryService, SocietiesService)
 @Injectable()
 export class AdminService {
-  constructor(prisma, notifications, auditLog, reportsService) {
+  constructor(prisma, notifications, auditLog, reportsService, cloudinary, societiesService) {
     this.prisma = prisma;
     this.notifications = notifications;
     this.auditLog = auditLog;
     this.reportsService = reportsService;
+    this.cloudinary = cloudinary;
+    this.societiesService = societiesService;
   }
 
   async dashboard() {
@@ -51,35 +55,44 @@ export class AdminService {
    * counting real rows created after the admin's own client-tracked "last
    * viewed" cutoff for that tab (no server-side "seen" state needed; a
    * missing `since` just means "nothing new yet" for that tab). */
-  async notificationCounts({ usersSince, reportsSince, moderationSince, deletionRequestsSince } = {}) {
-    const [newUsers, newSupportRequests, newListingReports, newUserReports, newDeletionRequests] = await Promise.all([
-      usersSince
-        ? this.prisma.user.count({ where: { createdAt: { gt: new Date(usersSince) }, deletedAt: null } })
-        : 0,
-      reportsSince
-        ? this.prisma.supportRequest.count({ where: { createdAt: { gt: new Date(reportsSince) } } })
-        : 0,
-      moderationSince
-        ? this.prisma.report.count({
-            where: { status: 'OPEN', listingId: { not: null }, createdAt: { gt: new Date(moderationSince) } },
-          })
-        : 0,
-      moderationSince
-        ? this.prisma.report.count({
-            where: { status: 'OPEN', reportedUserId: { not: null }, createdAt: { gt: new Date(moderationSince) } },
-          })
-        : 0,
-      deletionRequestsSince
-        ? this.prisma.user.count({
-            where: { deletionRequestedAt: { gt: new Date(deletionRequestsSince) }, deletedAt: null },
-          })
-        : 0,
-    ]);
+  async notificationCounts({
+    usersSince, reportsSince, moderationSince, deletionRequestsSince, locationRequestsSince,
+  } = {}) {
+    const [newUsers, newSupportRequests, newListingReports, newUserReports, newDeletionRequests, newLocationRequests] =
+      await Promise.all([
+        usersSince
+          ? this.prisma.user.count({ where: { createdAt: { gt: new Date(usersSince) }, deletedAt: null } })
+          : 0,
+        reportsSince
+          ? this.prisma.supportRequest.count({ where: { createdAt: { gt: new Date(reportsSince) } } })
+          : 0,
+        moderationSince
+          ? this.prisma.report.count({
+              where: { status: 'OPEN', listingId: { not: null }, createdAt: { gt: new Date(moderationSince) } },
+            })
+          : 0,
+        moderationSince
+          ? this.prisma.report.count({
+              where: { status: 'OPEN', reportedUserId: { not: null }, createdAt: { gt: new Date(moderationSince) } },
+            })
+          : 0,
+        deletionRequestsSince
+          ? this.prisma.user.count({
+              where: { deletionRequestedAt: { gt: new Date(deletionRequestsSince) }, deletedAt: null },
+            })
+          : 0,
+        locationRequestsSince
+          ? this.prisma.locationRequest.count({
+              where: { status: 'PENDING', createdAt: { gt: new Date(locationRequestsSince) } },
+            })
+          : 0,
+      ]);
     return {
       newUsers,
       newReports: newSupportRequests,
       newModeration: newListingReports + newUserReports,
       newDeletionRequests,
+      newLocationRequests,
     };
   }
 
@@ -293,6 +306,102 @@ export class AdminService {
     return updated;
   }
 
+  // ---- location requests (a member's city/society wasn't in the picker) ----
+
+  async listLocationRequests() {
+    const requests = await this.prisma.locationRequest.findMany({
+      where: { status: 'PENDING' },
+      include: { requestedBy: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return requests.map((r) => ({
+      id: r.id,
+      cityName: r.cityName,
+      societyName: r.societyName,
+      requestedBy: r.requestedBy.name,
+      requestedByPhone: r.requestedBy.phone,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  /** Approving actually creates the City/Area/Society (same find-or-create
+   * path as an admin manually adding one from the Societies tab) and moves
+   * the requester straight into it, so approval is the one action that both
+   * unblocks their account and adds the option for everyone else. */
+  async approveLocationRequest(id, adminId) {
+    const request = await this.prisma.locationRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Location request not found');
+    if (request.status !== 'PENDING') throw new BadRequestException('This request was already reviewed');
+
+    const society = await this.societiesService.adminCreateSociety({
+      name: request.societyName,
+      cityName: request.cityName,
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.locationRequest.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          reviewedById: adminId,
+          reviewedAt: new Date(),
+          createdSocietyId: society.id,
+        },
+      }),
+      this.prisma.user.update({
+        where: { id: request.requestedById },
+        data: { cityId: society.city.id, areaId: society.area.id, societyId: society.id },
+      }),
+    ]);
+
+    await this.notifications.create(this.prisma, {
+      userId: request.requestedById,
+      type: 'ADMIN',
+      title: 'Your society request was approved!',
+      body: `${request.societyName}, ${request.cityName} is now live — you're already in it.`,
+    }).catch(() => {});
+
+    await this.auditLog.record({
+      actorAdminId: adminId,
+      action: 'LOCATION_REQUEST_APPROVED',
+      entityType: 'location_request',
+      entityId: id,
+      newData: { societyId: society.id },
+    }).catch(() => {});
+
+    return { success: true, society };
+  }
+
+  async rejectLocationRequest(id, adminId, reason) {
+    const request = await this.prisma.locationRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Location request not found');
+    if (request.status !== 'PENDING') throw new BadRequestException('This request was already reviewed');
+
+    await this.prisma.locationRequest.update({
+      where: { id },
+      data: { status: 'REJECTED', reviewedById: adminId, reviewedAt: new Date(), rejectionReason: reason || null },
+    });
+
+    await this.notifications.create(this.prisma, {
+      userId: request.requestedById,
+      type: 'ADMIN',
+      title: 'Your society request was declined',
+      body: reason
+        ? `${request.societyName}, ${request.cityName}: ${reason}`
+        : `${request.societyName}, ${request.cityName} could not be added right now.`,
+    }).catch(() => {});
+
+    await this.auditLog.record({
+      actorAdminId: adminId,
+      action: 'LOCATION_REQUEST_REJECTED',
+      entityType: 'location_request',
+      entityId: id,
+      newData: { reason: reason || null },
+    }).catch(() => {});
+
+    return { success: true };
+  }
+
   async removeListing(listingId, adminId) {
     const listing = await this.prisma.bookListing.findUnique({ where: { id: listingId } });
     if (!listing) throw new NotFoundException('Listing not found');
@@ -316,6 +425,9 @@ export class AdminService {
       // eslint-disable-next-line no-await-in-loop
       await this.reportsService.adminResolve(id, adminId, 'The reported listing was removed by an admin.').catch(() => {});
     }
+
+    const photos = await this.prisma.bookListingPhoto.findMany({ where: { listingId } });
+    await Promise.all(photos.map((p) => this.cloudinary.deleteImage(p.imageUrl)));
 
     return updated;
   }

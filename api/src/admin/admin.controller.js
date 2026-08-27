@@ -25,9 +25,12 @@ export class AdminController {
   @Get('notification-counts')
   @Params({
     0: Query('usersSince'), 1: Query('reportsSince'), 2: Query('moderationSince'), 3: Query('deletionRequestsSince'),
+    4: Query('locationRequestsSince'),
   })
-  notificationCounts(usersSince, reportsSince, moderationSince, deletionRequestsSince) {
-    return this.admin.notificationCounts({ usersSince, reportsSince, moderationSince, deletionRequestsSince });
+  notificationCounts(usersSince, reportsSince, moderationSince, deletionRequestsSince, locationRequestsSince) {
+    return this.admin.notificationCounts({
+      usersSince, reportsSince, moderationSince, deletionRequestsSince, locationRequestsSince,
+    });
   }
 
   // ---- users ----
@@ -107,6 +110,25 @@ export class AdminController {
   @Params({ 0: Param('id'), 1: CurrentAdmin('id') })
   removeSociety(id, adminId) {
     return this.admin.removeSociety(id, adminId);
+  }
+
+  // ---- location requests (city/society a member asked to add) ----
+
+  @Get('location-requests')
+  listLocationRequests() {
+    return this.admin.listLocationRequests();
+  }
+
+  @Post('location-requests/:id/approve')
+  @Params({ 0: Param('id'), 1: CurrentAdmin('id') })
+  approveLocationRequest(id, adminId) {
+    return this.admin.approveLocationRequest(id, adminId);
+  }
+
+  @Post('location-requests/:id/reject')
+  @Params({ 0: Param('id'), 1: CurrentAdmin('id'), 2: Body() })
+  rejectLocationRequest(id, adminId, body) {
+    return this.admin.rejectLocationRequest(id, adminId, body?.reason);
   }
 
   // ---- listings ----

@@ -52,9 +52,12 @@ export default function AdminLoginPage() {
 
   const resend = async () => {
     try {
-      await requestOtp(identifier.trim());
+      const result = await requestOtp(identifier.trim());
       setSeconds(RESEND_SECONDS);
-      showToast('OTP resent');
+      // In dev mode the code's own toast (api-client.js) already confirms a
+      // fresh one was sent — a second toast right behind it would just
+      // overwrite that code before it's readable.
+      if (!result?.devCode) showToast('OTP resent');
     } catch (err) {
       showToast(err.message || 'Could not resend the code');
     }

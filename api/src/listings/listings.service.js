@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { toListingLocation, toPublicUser } from '../common/serializers/user.serializer';
 import { grantPendingCredit, reversePendingCredit } from '../credits/credits.tx';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CloudinaryService } from '../uploads/cloudinary.service';
 
 const MAX_PHOTOS = 3; // "Sirf per book 3 images upload krne ka option" — enforced here, not just in the UI.
 
@@ -25,12 +26,13 @@ const LISTING_INCLUDE = {
  * preview/publish (published immediately on create — there's no separate
  * draft step in the current frontend flow), edit, pause/reactivate, remove.
  */
-@Dependencies(PrismaService, NotificationsService)
+@Dependencies(PrismaService, NotificationsService, CloudinaryService)
 @Injectable()
 export class ListingsService {
-  constructor(prisma, notifications) {
+  constructor(prisma, notifications, cloudinary) {
     this.prisma = prisma;
     this.notifications = notifications;
+    this.cloudinary = cloudinary;
   }
 
   async createListing(ownerId, payload) {
@@ -140,6 +142,7 @@ export class ListingsService {
     if (updates.conditionDescription !== undefined) data.conditionDescription = updates.conditionDescription;
     if (updates.pickupInstructions !== undefined) data.pickupInstructions = updates.pickupInstructions;
 
+    let removedPhotoUrls = [];
     await this.prisma.$transaction(async (tx) => {
       if (Object.keys(data).length) await tx.bookListing.update({ where: { id }, data });
       if (updates.book) {
@@ -159,6 +162,8 @@ export class ListingsService {
         if (updates.photoUrls.length > MAX_PHOTOS) {
           throw new BadRequestException(`A listing can have at most ${MAX_PHOTOS} photos`);
         }
+        const existingPhotos = await tx.bookListingPhoto.findMany({ where: { listingId: id } });
+        removedPhotoUrls = existingPhotos.map((p) => p.imageUrl).filter((url) => !updates.photoUrls.includes(url));
         await tx.bookListingPhoto.deleteMany({ where: { listingId: id } });
         await tx.bookListingPhoto.createMany({
           data: updates.photoUrls.map((url, index) => ({
@@ -170,6 +175,11 @@ export class ListingsService {
         });
       }
     });
+
+    // Photos actually replaced/dropped — not the ones just kept in place —
+    // are gone for good, so free the Cloudinary storage rather than leaving
+    // orphaned files behind.
+    await Promise.all(removedPhotoUrls.map((url) => this.cloudinary.deleteImage(url)));
 
     return this.getListing(id, { viewerId: ownerId });
   }
@@ -192,6 +202,8 @@ export class ListingsService {
       throw new BadRequestException('This listing has an active or completed exchange and cannot be removed');
     }
 
+    const photos = await this.prisma.bookListingPhoto.findMany({ where: { listingId: id } });
+
     await this.prisma.$transaction(async (tx) => {
       await tx.bookListing.update({ where: { id }, data: { status: 'REMOVED', removedAt: new Date() } });
       // The pending credit only exists if it hasn't already been converted by
@@ -199,6 +211,8 @@ export class ListingsService {
       // this is always safe to reverse.
       await reversePendingCredit(tx, { userId: ownerId, referenceId: id, bookTitle: listing.book.title });
     });
+
+    await Promise.all(photos.map((p) => this.cloudinary.deleteImage(p.imageUrl)));
 
     return { success: true };
   }

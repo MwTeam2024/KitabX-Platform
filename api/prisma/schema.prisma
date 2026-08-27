@@ -52,6 +52,7 @@ model User {
   devices             UserDevice[]
   notificationPrefs   UserNotificationPreference?
   verifications       UserVerification[]
+  locationRequests    LocationRequest[]
   area                Area?                       @relation(fields: [areaId], references: [id])
   block               SocietyBlock?               @relation(fields: [blockId], references: [id])
   city                City?                       @relation(fields: [cityId], references: [id])
@@ -140,21 +141,22 @@ model Area {
 }
 
 model Society {
-  id           String                    @id @default(uuid())
-  areaId       String                    @map("area_id")
-  name         String
-  address      String?
-  latitude     Float?
-  longitude    Float?
-  isActive     Boolean                   @default(true) @map("is_active")
-  createdAt    DateTime                  @default(now()) @map("created_at")
-  updatedAt    DateTime                  @updatedAt @map("updated_at")
-  location     Unsupported("geography")?
-  listings     BookListing[]             @relation("ListingSociety")
-  area         Area                      @relation(fields: [areaId], references: [id], onDelete: Cascade)
-  blocks       SocietyBlock[]
-  pickupPoints SocietyPickupPoint[]
-  users        User[]
+  id                      String                    @id @default(uuid())
+  areaId                  String                    @map("area_id")
+  name                    String
+  address                 String?
+  latitude                Float?
+  longitude               Float?
+  isActive                Boolean                   @default(true) @map("is_active")
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime                  @updatedAt @map("updated_at")
+  location                Unsupported("geography")?
+  listings                BookListing[]             @relation("ListingSociety")
+  area                    Area                      @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  blocks                  SocietyBlock[]
+  pickupPoints            SocietyPickupPoint[]
+  users                   User[]
+  locationRequestsCreated LocationRequest[]
 
   @@index([areaId])
   @@index([location], map: "societies_location_gist_idx", type: Gist)
@@ -187,6 +189,38 @@ model SocietyPickupPoint {
   @@index([societyId])
   @@index([location], map: "society_pickup_points_location_gist_idx", type: Gist)
   @@map("society_pickup_points")
+}
+
+/**
+ * A member's request to add a city/society that isn't in the signup or
+ * location-change picker yet — surfaced in the admin Societies section for
+ * approve/reject. Approving one actually creates the City/Area/Society (via
+ * the same find-or-create path as an admin manually adding one) and moves
+ * the requester straight into it, so they don't have to redo anything.
+ */
+model LocationRequest {
+  id               String                @id @default(uuid())
+  requestedById    String                @map("requested_by_id")
+  cityName         String                @map("city_name")
+  societyName      String                @map("society_name")
+  status           LocationRequestStatus @default(PENDING)
+  reviewedById     String?               @map("reviewed_by_id")
+  reviewedAt       DateTime?             @map("reviewed_at")
+  rejectionReason  String?               @map("rejection_reason")
+  createdSocietyId String?               @map("created_society_id")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  requestedBy      User                  @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  reviewedBy       AdminUser?            @relation(fields: [reviewedById], references: [id])
+  createdSociety   Society?              @relation(fields: [createdSocietyId], references: [id])
+
+  @@index([status])
+  @@map("location_requests")
+}
+
+enum LocationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model Book {
@@ -557,17 +591,18 @@ model SupportRequest {
 }
 
 model AdminUser {
-  id              String       @id @default(uuid())
-  email           String?      @unique
-  name            String?
-  role            AdminRole    @default(ADMIN)
-  isActive        Boolean      @default(true) @map("is_active")
-  lastLoginAt     DateTime?    @map("last_login_at")
-  createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt @map("updated_at")
-  phone           String       @unique
-  settingsUpdated AppSetting[]
-  resolvedReports Report[]
+  id                       String            @id @default(uuid())
+  email                    String?           @unique
+  name                     String?
+  role                     AdminRole         @default(ADMIN)
+  isActive                 Boolean           @default(true) @map("is_active")
+  lastLoginAt              DateTime?         @map("last_login_at")
+  createdAt                DateTime          @default(now()) @map("created_at")
+  updatedAt                DateTime          @updatedAt @map("updated_at")
+  phone                    String            @unique
+  settingsUpdated          AppSetting[]
+  resolvedReports          Report[]
+  reviewedLocationRequests LocationRequest[]
 
   @@map("admin_users")
 }

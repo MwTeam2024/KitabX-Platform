@@ -78,7 +78,15 @@ export default function ProfileSettingsPage() {
     openSheet('Change Location', (
       <LocationChangeForm
         user={user}
-        onDone={(updated) => { setSession(updated); closeSheet(); showToast('Location updated'); }}
+        onDone={(updated, requestedLocation) => {
+          setSession(updated);
+          closeSheet();
+          showToast(
+            requestedLocation
+              ? `Your request to add ${requestedLocation.societyName}, ${requestedLocation.cityName} has reached the admin`
+              : 'Location updated',
+          );
+        }}
       />
     ));
   };
@@ -315,10 +323,13 @@ function PhoneChangeForm({ currentPhone, onDone }) {
   const sendCode = async () => {
     setBusy(true);
     try {
-      await authService.requestPhoneChangeOtp(newPhone);
+      const result = await authService.requestPhoneChangeOtp(newPhone);
       setStep('verify');
       setSeconds(RESEND_SECONDS);
-      showToast(`OTP sent to ${newPhone}`);
+      // In dev mode the code's own toast (api-client.js) already confirms
+      // it was sent — a second toast right behind it would just overwrite
+      // that code before it's readable.
+      if (!result?.devCode) showToast(`OTP sent to ${newPhone}`);
     } catch (err) {
       showToast(err.message || 'Could not send the code');
     } finally {
@@ -328,9 +339,9 @@ function PhoneChangeForm({ currentPhone, onDone }) {
 
   const resend = async () => {
     try {
-      await authService.requestPhoneChangeOtp(newPhone);
+      const result = await authService.requestPhoneChangeOtp(newPhone);
       setSeconds(RESEND_SECONDS);
-      showToast('OTP resent');
+      if (!result?.devCode) showToast('OTP resent');
     } catch (err) {
       showToast(err.message || 'Could not resend the code');
     }
@@ -403,10 +414,10 @@ function EmailChangeForm({ currentEmail, onDone }) {
   const sendCode = async () => {
     setBusy(true);
     try {
-      await authService.requestEmailChangeOtp(newEmail);
+      const result = await authService.requestEmailChangeOtp(newEmail);
       setStep('verify');
       setSeconds(RESEND_SECONDS);
-      showToast(`OTP sent to ${newEmail}`);
+      if (!result?.devCode) showToast(`OTP sent to ${newEmail}`);
     } catch (err) {
       showToast(err.message || 'Could not send the code');
     } finally {
@@ -416,9 +427,9 @@ function EmailChangeForm({ currentEmail, onDone }) {
 
   const resend = async () => {
     try {
-      await authService.requestEmailChangeOtp(newEmail);
+      const result = await authService.requestEmailChangeOtp(newEmail);
       setSeconds(RESEND_SECONDS);
-      showToast('OTP resent');
+      if (!result?.devCode) showToast('OTP resent');
     } catch (err) {
       showToast(err.message || 'Could not resend the code');
     }
@@ -489,16 +500,19 @@ function LocationChangeForm({ user, onDone }) {
   });
   const [busy, setBusy] = useState(false);
 
+  const hasLocationRequest = values.locationRequest?.cityName?.trim() && values.locationRequest?.societyName?.trim();
+
   const save = async () => {
-    if (!values.societyId) return showToast('Select a society');
+    if (!values.societyId && !hasLocationRequest) return showToast('Select a society, or enter one to request');
     setBusy(true);
     try {
       const { user: updated } = await usersService.updateProfile({
-        societyId: values.societyId,
-        blockId: values.blockId || null,
+        societyId: values.societyId || undefined,
+        blockId: values.societyId ? (values.blockId || null) : undefined,
         flatUnit: values.flatUnit,
+        locationRequest: values.locationRequest || undefined,
       });
-      onDone(updated);
+      onDone(updated, hasLocationRequest ? values.locationRequest : null);
     } catch (err) {
       showToast(err.message || 'Could not update your location');
     } finally {
@@ -513,8 +527,8 @@ function LocationChangeForm({ user, onDone }) {
         you see right away.
       </p>
       <SocietyFields values={values} onChange={(patch) => setValues((v) => ({ ...v, ...patch }))} />
-      <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={save} disabled={busy || !values.societyId}>
-        {busy ? 'Saving…' : 'Save location'}
+      <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={save} disabled={busy || (!values.societyId && !hasLocationRequest)}>
+        {busy ? 'Saving…' : hasLocationRequest ? 'Send request' : 'Save location'}
       </button>
     </>
   );

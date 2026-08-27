@@ -45,8 +45,14 @@ export default function OtpVerifyForm({ mobile }) {
         // Set only when this signup started from the merged field with an
         // email typed in (Task 33/38) — verified in its own step already.
         emailVerificationToken: signupDraft.emailVerificationToken || undefined,
+        // City/society wasn't in the picker — a pending request instead of a
+        // real one, reviewed from the admin Societies section.
+        locationRequest: signupDraft.locationRequest || undefined,
       });
       setSession(user);
+      if (signupDraft.locationRequest) {
+        showToast(`Your request to add ${signupDraft.locationRequest.societyName}, ${signupDraft.locationRequest.cityName} has reached the admin`);
+      }
       router.push('/home');
     } catch (err) {
       showToast(err.message || 'Incorrect code');
@@ -57,9 +63,12 @@ export default function OtpVerifyForm({ mobile }) {
 
   const resend = async () => {
     try {
-      await authService.requestOtp(mobile);
+      const result = await authService.requestOtp(mobile);
       setSeconds(RESEND_SECONDS);
-      showToast(`OTP resent to ${mobile}`);
+      // In dev mode the code's own toast (api-client.js) already confirms
+      // a fresh one was sent — a second toast right behind it would just
+      // overwrite that code before it's readable.
+      if (!result?.devCode) showToast(`OTP resent to ${mobile}`);
     } catch (err) {
       showToast(err.message || 'Could not resend the code');
     }

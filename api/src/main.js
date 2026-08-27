@@ -1,5 +1,4 @@
 import 'reflect-metadata';
-import path from 'path';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,9 +16,6 @@ async function bootstrap() {
 
   app.setGlobalPrefix(prefix);
   app.use(cookieParser());
-  // Local-disk fallback for photo uploads when R2 isn't configured — served
-  // outside the API prefix since it's static content, not an API route.
-  app.useStaticAssets(path.join(process.cwd(), 'storage', 'local-uploads'), { prefix: '/media/' });
   app.enableCors({
     origin: frontendUrl,
     credentials: true,

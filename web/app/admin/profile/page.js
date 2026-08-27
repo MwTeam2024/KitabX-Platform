@@ -93,10 +93,13 @@ function AdminPhoneChangeForm({ currentPhone, onDone }) {
   const sendCode = async () => {
     setBusy(true);
     try {
-      await adminService.requestPhoneChangeOtp(newPhone);
+      const result = await adminService.requestPhoneChangeOtp(newPhone);
       setStep('verify');
       setSeconds(RESEND_SECONDS);
-      showToast(`OTP sent to ${newPhone}`);
+      // In dev mode the code's own toast (api-client.js) already confirms
+      // it was sent — a second toast right behind it would just overwrite
+      // that code before it's readable.
+      if (!result?.devCode) showToast(`OTP sent to ${newPhone}`);
     } catch (err) {
       showToast(err.message || 'Could not send the code');
     } finally {
@@ -106,9 +109,9 @@ function AdminPhoneChangeForm({ currentPhone, onDone }) {
 
   const resend = async () => {
     try {
-      await adminService.requestPhoneChangeOtp(newPhone);
+      const result = await adminService.requestPhoneChangeOtp(newPhone);
       setSeconds(RESEND_SECONDS);
-      showToast('OTP resent');
+      if (!result?.devCode) showToast('OTP resent');
     } catch (err) {
       showToast(err.message || 'Could not resend the code');
     }
@@ -180,10 +183,10 @@ function AdminEmailChangeForm({ currentEmail, onDone }) {
   const sendCode = async () => {
     setBusy(true);
     try {
-      await adminService.requestEmailChangeOtp(newEmail);
+      const result = await adminService.requestEmailChangeOtp(newEmail);
       setStep('verify');
       setSeconds(RESEND_SECONDS);
-      showToast(`OTP sent to ${newEmail}`);
+      if (!result?.devCode) showToast(`OTP sent to ${newEmail}`);
     } catch (err) {
       showToast(err.message || 'Could not send the code');
     } finally {
@@ -193,9 +196,9 @@ function AdminEmailChangeForm({ currentEmail, onDone }) {
 
   const resend = async () => {
     try {
-      await adminService.requestEmailChangeOtp(newEmail);
+      const result = await adminService.requestEmailChangeOtp(newEmail);
       setSeconds(RESEND_SECONDS);
-      showToast('OTP resent');
+      if (!result?.devCode) showToast('OTP resent');
     } catch (err) {
       showToast(err.message || 'Could not resend the code');
     }

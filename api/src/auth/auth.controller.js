@@ -58,6 +58,7 @@ export class AuthController {
       blockId: body.blockId,
       flatUnit: body.flatUnit,
       acceptedTerms: body.acceptedTerms,
+      locationRequest: body.locationRequest,
     });
 
     this.authService.issueSession(res, user);

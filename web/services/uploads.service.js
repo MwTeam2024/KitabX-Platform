@@ -1,6 +1,6 @@
 import { apiClient } from "@/lib/api-client";
 
-/** Backend re-encodes to WebP and resizes via sharp before storing in Cloudflare R2. */
+/** Backend re-encodes to WebP and resizes via sharp before storing in Cloudinary. */
 export const uploadsService = {
   uploadListingPhoto: (file) => {
     const formData = new FormData();

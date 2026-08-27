@@ -7,9 +7,10 @@ import { SocietiesModule } from '../societies/societies.module';
 import { ReportsModule } from '../reports/reports.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
-  imports: [SocietiesModule, ReportsModule, NotificationsModule, AuthModule],
+  imports: [SocietiesModule, ReportsModule, NotificationsModule, AuthModule, UploadsModule],
   controllers: [AdminAuthController, AdminController],
   providers: [AdminAuthService, AdminService],
 })

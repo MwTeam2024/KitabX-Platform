@@ -13,7 +13,7 @@ const NAV = [
   { href: '/admin', label: 'Dashboard', icon: 'grid' },
   { href: '/admin/users', label: 'Users', icon: 'users', badgeKey: 'newUsers' },
   { href: '/admin/deletion-requests', label: 'Account Deletions', icon: 'trash', badgeKey: 'newDeletionRequests' },
-  { href: '/admin/societies', label: 'Societies', icon: 'building' },
+  { href: '/admin/societies', label: 'Societies', icon: 'building', badgeKey: 'newLocationRequests' },
   { href: '/admin/listings', label: 'Book Moderation', icon: 'bookOpen', badgeKey: 'newModeration' },
   { href: '/admin/exchanges', label: 'Listings & Exchanges', icon: 'layers' },
   { href: '/admin/credits', label: 'Credits', icon: 'coin' },

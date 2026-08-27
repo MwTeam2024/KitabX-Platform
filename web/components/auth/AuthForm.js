@@ -90,7 +90,9 @@ export default function AuthForm({ initialTab = 'signup' }) {
 
   const submitSignupForm = async () => {
     if (!form.mobile.trim()) return showToast('Enter your mobile number or email address');
-    if (!form.societyId) return showToast('Select your society');
+    if (!form.societyId && !(form.locationRequest?.cityName?.trim() && form.locationRequest?.societyName?.trim())) {
+      return showToast('Select your society, or enter one to request');
+    }
     setSending(true);
     try {
       if (isEmailInput(form.mobile.trim())) {
@@ -111,9 +113,12 @@ export default function AuthForm({ initialTab = 'signup' }) {
 
   const resendSignupEmailOtp = async () => {
     try {
-      await authService.requestSignupEmailOtp(signupEmail);
+      const result = await authService.requestSignupEmailOtp(signupEmail);
       setSignupEmailSeconds(RESEND_SECONDS);
-      showToast('OTP resent');
+      // In dev mode the code's own toast (api-client.js) already confirms
+      // a fresh one was sent — a second toast right behind it would just
+      // overwrite that code before it's readable.
+      if (!result?.devCode) showToast('OTP resent');
     } catch (err) {
       showToast(err.message || 'Could not resend the code');
     }
@@ -169,10 +174,11 @@ export default function AuthForm({ initialTab = 'signup' }) {
   const resendSigninOtp = async () => {
     try {
       const identifier = signinIdentifier.trim();
-      if (signinChannel === 'email') await authService.requestEmailOtp(identifier);
-      else await authService.requestOtp(identifier);
+      const result = signinChannel === 'email'
+        ? await authService.requestEmailOtp(identifier)
+        : await authService.requestOtp(identifier);
       setSigninSeconds(RESEND_SECONDS);
-      showToast('OTP resent');
+      if (!result?.devCode) showToast('OTP resent');
     } catch (err) {
       showToast(err.message || 'Could not resend the code');
     }

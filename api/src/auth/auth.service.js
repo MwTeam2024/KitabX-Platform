@@ -62,6 +62,20 @@ export class AuthService {
       await tx.creditAccount.create({ data: { userId: user.id } });
       await tx.userNotificationPreference.create({ data: { userId: user.id } });
       await tx.userVerification.create({ data: { userId: user.id, status: 'PENDING' } });
+
+      // A society picker with nothing that matches yet — the member is
+      // created without one, and this stands in for it until an admin
+      // approves the request (see admin.service.js#approveLocationRequest).
+      if (!profile.societyId && profile.locationRequest?.cityName && profile.locationRequest?.societyName) {
+        await tx.locationRequest.create({
+          data: {
+            requestedById: user.id,
+            cityName: profile.locationRequest.cityName.trim(),
+            societyName: profile.locationRequest.societyName.trim(),
+          },
+        });
+      }
+
       return user;
     });
   }
@@ -127,8 +141,30 @@ export class AuthService {
     if (updates.societyId !== undefined) data.societyId = updates.societyId;
     if (updates.blockId !== undefined) data.blockId = updates.blockId;
     if (updates.flatUnit !== undefined) data.flatUnit = updates.flatUnit;
-    if (!Object.keys(data).length) throw new BadRequestException('No recognized fields to update');
-    return this.prisma.user.update({ where: { id: userId }, data, include: USER_INCLUDE });
+
+    const wantsLocationRequest = updates.locationRequest?.cityName && updates.locationRequest?.societyName;
+    if (!Object.keys(data).length && !wantsLocationRequest) {
+      throw new BadRequestException('No recognized fields to update');
+    }
+
+    const user = Object.keys(data).length
+      ? await this.prisma.user.update({ where: { id: userId }, data, include: USER_INCLUDE })
+      : await this.prisma.user.findUnique({ where: { id: userId }, include: USER_INCLUDE });
+
+    // Same "not in the picker yet" request as signup (findOrCreateUser
+    // above) — a member already has a society here, so this doesn't touch
+    // it; approval just gives them somewhere new to move into.
+    if (wantsLocationRequest) {
+      await this.prisma.locationRequest.create({
+        data: {
+          requestedById: userId,
+          cityName: updates.locationRequest.cityName.trim(),
+          societyName: updates.locationRequest.societyName.trim(),
+        },
+      });
+    }
+
+    return user;
   }
 
   async changePhone(userId, newPhone) {

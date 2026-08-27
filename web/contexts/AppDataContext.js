@@ -61,6 +61,7 @@ export function AppDataProvider({ children }) {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminDeletionRequests, setAdminDeletionRequests] = useState([]);
   const [adminSocieties, setAdminSocieties] = useState([]);
+  const [adminLocationRequests, setAdminLocationRequests] = useState([]);
   const [adminFlaggedListings, setAdminFlaggedListings] = useState([]);
   const [adminFlaggedUsers, setAdminFlaggedUsers] = useState([]);
   const [adminExchanges, setAdminExchanges] = useState([]);
@@ -319,6 +320,17 @@ export function AppDataProvider({ children }) {
     await loadAdminSocieties();
   }, [loadAdminSocieties]);
 
+  const loadAdminLocationRequests = useCallback(async () => setAdminLocationRequests(await adminService.listLocationRequests()), []);
+  const approveAdminLocationRequest = useCallback(async (id) => {
+    await adminService.approveLocationRequest(id);
+    setAdminLocationRequests((list) => list.filter((r) => r.id !== id));
+    await loadAdminSocieties(); // approval just created a new one — refresh the list it now belongs to
+  }, [loadAdminSocieties]);
+  const rejectAdminLocationRequest = useCallback(async (id, reason) => {
+    await adminService.rejectLocationRequest(id, reason);
+    setAdminLocationRequests((list) => list.filter((r) => r.id !== id));
+  }, []);
+
   const loadAdminFlaggedListings = useCallback(async () => setAdminFlaggedListings(await adminService.listFlaggedListings()), []);
   const removeFlaggedListing = useCallback(async (listingId) => {
     await adminService.removeListing(listingId);
@@ -412,7 +424,8 @@ export function AppDataProvider({ children }) {
     books, discoveryKeys, wishlist, credits, creditHistory, exchanges, chatThreads, requestedKeys,
     accountSuspended: false,
     admin: {
-      users: adminUsers, deletionRequests: adminDeletionRequests, societies: adminSocieties, flaggedListings: adminFlaggedListings,
+      users: adminUsers, deletionRequests: adminDeletionRequests, societies: adminSocieties,
+      locationRequests: adminLocationRequests, flaggedListings: adminFlaggedListings,
       flaggedUsers: adminFlaggedUsers,
       exchanges: adminExchanges, creditsLedger: adminCreditsLedger, reports: adminReports,
       settings: adminSettings, dashboard: adminDashboard,
@@ -448,13 +461,14 @@ export function AppDataProvider({ children }) {
     loadAdminDashboard, loadAdminUsers, setUserVerification, setUserSuspension, approveAdminUser, rejectAdminUser,
     loadAdminDeletionRequests, actionAdminDeletionRequest, rejectAdminDeletionRequest,
     loadAdminSocieties, addAdminSociety, editAdminSociety, deleteAdminSociety,
+    loadAdminLocationRequests, approveAdminLocationRequest, rejectAdminLocationRequest,
     loadAdminFlaggedListings, removeFlaggedListing,
     loadAdminFlaggedUsers, resolveFlaggedUser,
     loadAdminExchanges, loadAdminCreditsLedger, submitAdminCreditCorrection,
     loadAdminReports, resolveAdminReport, loadAdminSettings, saveAdminSettings,
   }), [
     books, discoveryKeys, wishlist, credits, creditHistory, exchanges, chatThreads, requestedKeys,
-    adminUsers, adminDeletionRequests, adminSocieties, adminFlaggedListings, adminFlaggedUsers, adminExchanges, adminCreditsLedger, adminReports, adminSettings, adminDashboard,
+    adminUsers, adminDeletionRequests, adminSocieties, adminLocationRequests, adminFlaggedListings, adminFlaggedUsers, adminExchanges, adminCreditsLedger, adminReports, adminSettings, adminDashboard,
     refreshBooks, refreshMyBooks, searchBooks, refreshCredits, deleteCreditTransaction, clearCreditHistory,
     isWishlisted, toggleWishlist, refreshWishlist,
     requestBook, cancelBookRequest, getExchange, ensureExchange, refreshExchanges, refreshExchangeDetail,
@@ -463,7 +477,9 @@ export function AppDataProvider({ children }) {
     refreshChatThreads, loadThreadMessages, sendMessage, appendMessage, openThreadForExchange, deleteThread, getOwnerProfile,
     loadAdminDashboard, loadAdminUsers, setUserVerification, setUserSuspension, approveAdminUser, rejectAdminUser,
     loadAdminDeletionRequests, actionAdminDeletionRequest, rejectAdminDeletionRequest,
-    loadAdminSocieties, addAdminSociety, editAdminSociety, deleteAdminSociety, loadAdminFlaggedListings, removeFlaggedListing,
+    loadAdminSocieties, addAdminSociety, editAdminSociety, deleteAdminSociety,
+    loadAdminLocationRequests, approveAdminLocationRequest, rejectAdminLocationRequest,
+    loadAdminFlaggedListings, removeFlaggedListing,
     loadAdminFlaggedUsers, resolveFlaggedUser,
     loadAdminExchanges, loadAdminCreditsLedger, submitAdminCreditCorrection, loadAdminReports, resolveAdminReport,
     loadAdminSettings, saveAdminSettings,
