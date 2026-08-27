@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useSocieties } from '@/hooks/useSocieties';
 
@@ -37,11 +37,6 @@ export default function SocietyFields({ values, onChange }) {
   }, [selectedSociety]);
 
   const cityText = values.cityText || '';
-  const cityNames = useMemo(() => {
-    const seen = new Set();
-    societies.forEach((s) => { if (s.city?.name) seen.add(s.city.name); });
-    return [...seen];
-  }, [societies]);
 
   const matchedCity = cityText.trim()
     ? societies.find((s) => s.city?.name.toLowerCase() === cityText.trim().toLowerCase())?.city
@@ -152,15 +147,11 @@ export default function SocietyFields({ values, onChange }) {
           <input
             id="ob-city"
             className="has-badge"
-            list="ob-city-list"
             placeholder={loading ? 'Loading cities…' : 'Start typing your city'}
             value={cityText}
             onChange={(e) => onCityInput(e.target.value)}
             disabled={loading}
           />
-          <datalist id="ob-city-list">
-            {cityNames.map((name) => <option key={name} value={name} />)}
-          </datalist>
         </div>
       </div>
 
