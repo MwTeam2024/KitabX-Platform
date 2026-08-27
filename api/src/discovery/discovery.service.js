@@ -22,7 +22,17 @@ export class DiscoveryService {
       return { listings: [], note: 'Join a society to see books nearby.' };
     }
 
-    const nearbySocieties = await this._societiesWithinRadius(viewer.societyId, includeNearby ? radiusKm : 0);
+    // Independent of each other — fired together instead of stacking two
+    // sequential round trips to Neon.
+    const [nearbySocieties, received] = await Promise.all([
+      this._societiesWithinRadius(viewer.societyId, includeNearby ? radiusKm : 0),
+      this.prisma.exchange.findMany({
+        // A book already sitting on the viewer's own shelf shouldn't be
+        // offered to them again, even as a different member's copy.
+        where: { receiverId: viewer.id, status: 'COMPLETED' },
+        select: { listing: { select: { bookId: true } } },
+      }),
+    ]);
     if (!nearbySocieties.length) {
       // No coordinates set on the society yet (e.g. a freshly admin-created
       // one) — fall back to same-society-only discovery rather than showing
@@ -30,13 +40,6 @@ export class DiscoveryService {
       nearbySocieties.push({ societyId: viewer.societyId, distanceMeters: 0 });
     }
     const distanceBySociety = new Map(nearbySocieties.map((s) => [s.societyId, s.distanceMeters]));
-
-    // A book already sitting on the viewer's own shelf shouldn't be offered
-    // to them again, even as a different member's copy.
-    const received = await this.prisma.exchange.findMany({
-      where: { receiverId: viewer.id, status: 'COMPLETED' },
-      select: { listing: { select: { bookId: true } } },
-    });
     const receivedBookIds = [...new Set(received.map((e) => e.listing.bookId))];
 
     const where = {
