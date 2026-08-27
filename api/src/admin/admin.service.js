@@ -320,6 +320,7 @@ export class AdminService {
       societyName: r.societyName,
       requestedBy: r.requestedBy.name,
       requestedByPhone: r.requestedBy.phone,
+      requestedByAddress: r.requestedBy.address,
       createdAt: r.createdAt,
     }));
   }

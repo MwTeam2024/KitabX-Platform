@@ -119,12 +119,13 @@ export default function AdminSocietiesPage() {
         <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
-              <tr><th>Requested By</th><th>Society</th><th>City</th><th>When</th><th /></tr>
+              <tr><th>Requested By</th><th>Address</th><th>Society</th><th>City</th><th>When</th><th /></tr>
             </thead>
             <tbody>
               {admin.locationRequests.map((r) => (
                 <tr key={r.id}>
                   <td>{r.requestedBy}</td>
+                  <td>{r.requestedByAddress || '—'}</td>
                   <td>{r.societyName}</td>
                   <td>{r.cityName}</td>
                   <td>{timeAgo(r.createdAt)}</td>
@@ -137,7 +138,7 @@ export default function AdminSocietiesPage() {
                 </tr>
               ))}
               {!admin.locationRequests.length && (
-                <tr><td colSpan={5} style={{ color: 'var(--outer-muted)' }}>No pending city/society requests. 🎉</td></tr>
+                <tr><td colSpan={6} style={{ color: 'var(--outer-muted)' }}>No pending city/society requests. 🎉</td></tr>
               )}
             </tbody>
           </table>

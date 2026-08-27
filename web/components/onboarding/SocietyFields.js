@@ -169,7 +169,7 @@ export default function SocietyFields({ values, onChange }) {
             <option value="">
               {loading ? 'Loading societies…'
                 : !cityText.trim() ? 'Type your city first'
-                : !matchedCity ? "We don't have that city yet"
+                : !matchedCity ? "We don't have society yet"
                 : societiesInCity.length ? 'Select your society' : 'No societies listed in this city yet'}
             </option>
             {societiesInCity.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
