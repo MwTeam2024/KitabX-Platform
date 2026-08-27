@@ -497,6 +497,7 @@ function LocationChangeForm({ user, onDone }) {
     societyId: user.society?.id || '',
     blockId: user.block?.id || '',
     flatUnit: user.flatUnit || '',
+    address: user.address || '',
   });
   const [busy, setBusy] = useState(false);
 
@@ -510,6 +511,7 @@ function LocationChangeForm({ user, onDone }) {
         societyId: values.societyId || undefined,
         blockId: values.societyId ? (values.blockId || null) : undefined,
         flatUnit: values.flatUnit,
+        address: values.address,
         locationRequest: values.locationRequest || undefined,
       });
       onDone(updated, hasLocationRequest ? values.locationRequest : null);

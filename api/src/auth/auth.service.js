@@ -55,6 +55,7 @@ export class AuthService {
           societyId: profile.societyId || null,
           blockId: profile.blockId || null,
           flatUnit: profile.flatUnit || null,
+          address: profile.address || null,
           acceptedTermsAt: profile.acceptedTerms ? new Date() : null,
         },
         include: USER_INCLUDE,
@@ -141,6 +142,7 @@ export class AuthService {
     if (updates.societyId !== undefined) data.societyId = updates.societyId;
     if (updates.blockId !== undefined) data.blockId = updates.blockId;
     if (updates.flatUnit !== undefined) data.flatUnit = updates.flatUnit;
+    if (updates.address !== undefined) data.address = updates.address;
 
     const wantsLocationRequest = updates.locationRequest?.cityName && updates.locationRequest?.societyName;
     if (!Object.keys(data).length && !wantsLocationRequest) {

@@ -47,6 +47,9 @@ export default function AuthForm({ initialTab = 'signup' }) {
     societyId: signupDraft.societyId || '',
     blockId: signupDraft.blockId || '',
     flatUnit: signupDraft.flatUnit || '',
+    address: signupDraft.address || '',
+    cityText: signupDraft.cityText,
+    locationRequest: signupDraft.locationRequest || null,
   });
   const [accepted, setAccepted] = useState(signupDraft.acceptedTerms);
 

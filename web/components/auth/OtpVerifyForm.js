@@ -41,6 +41,7 @@ export default function OtpVerifyForm({ mobile }) {
         societyId: signupDraft.societyId || undefined,
         blockId: signupDraft.blockId || undefined,
         flatUnit: signupDraft.flatUnit || undefined,
+        address: signupDraft.address || undefined,
         acceptedTerms: signupDraft.acceptedTerms,
         // Set only when this signup started from the merged field with an
         // email typed in (Task 33/38) — verified in its own step already.

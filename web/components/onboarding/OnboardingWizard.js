@@ -32,6 +32,7 @@ export default function OnboardingWizard() {
     societyId: user?.society?.id || '',
     blockId: user?.block?.id || '',
     flatUnit: user?.flatUnit || '',
+    address: user?.address || '',
   });
 
   const patch = (updates) => setForm((f) => ({ ...f, ...updates }));
@@ -53,6 +54,7 @@ export default function OnboardingWizard() {
         societyId: form.societyId || undefined,
         blockId: form.blockId || undefined,
         flatUnit: form.flatUnit || undefined,
+        address: form.address || undefined,
         locationRequest: form.locationRequest || undefined,
       });
       setSession(updated.user);
@@ -99,7 +101,7 @@ export default function OnboardingWizard() {
             <Sub>Books are exchanged inside your society first, then nearby ones.</Sub>
             <SocietyFields values={form} onChange={patch} />
             <NoteBox icon="lock">
-              Your exact flat number stays private — neighbours only see your block until a request is accepted.
+              Your exact address stays private — neighbours only see your society until a request is accepted.
             </NoteBox>
           </>
         )}

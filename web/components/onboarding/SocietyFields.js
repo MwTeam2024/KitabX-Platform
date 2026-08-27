@@ -3,19 +3,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import Icon from '@/components/ui/Icon';
 import { useSocieties } from '@/hooks/useSocieties';
-import { societiesService } from '@/services/societies.service';
 
 /**
- * City -> Society -> Block/Tower -> Flat/Unit selection, shared by signup,
- * the post-OTP onboarding step and Profile Settings' location change (§5).
- * The flat number is collected but never shown publicly — the block is what's
- * shown instead, which is why it has to be a real `SocietyBlock` id rather
- * than free text: the privacy redaction server-side (`toListingLocation`)
- * only has a block name to fall back on when it's a real relation, not a
- * string a member typed in.
+ * Address -> City -> Society selection, shared by signup, the post-OTP
+ * onboarding step and Profile Settings' location change (§5).
  *
- * Not every city/society is listed yet — "Request to add it" switches to a
- * free-text city+society name instead, submitted alongside whichever call
+ * City is free text, not a picker — the society list below it re-filters
+ * live to whatever's typed (case-insensitive, matched against the cities
+ * that actually have a society listed). Block/Tower and Flat/Unit are on
+ * hold for now (commented out below, not removed) per the current design.
+ *
+ * Not every city/society is listed yet — "Request to add it" switches City
+ * and Society to free text instead, submitted alongside whichever call
  * `onChange`'s owner makes (signup, onboarding finish, or a location-change
  * save) as `values.locationRequest`. The backend creates a pending
  * `LocationRequest` row for an admin to approve/reject (see the Societies
@@ -23,37 +22,42 @@ import { societiesService } from '@/services/societies.service';
  */
 export default function SocietyFields({ values, onChange }) {
   const { societies, loading } = useSocieties();
-  const [blocks, setBlocks] = useState([]);
-  const [blocksLoading, setBlocksLoading] = useState(false);
   const [requesting, setRequesting] = useState(false);
 
-  const cities = useMemo(() => {
-    const seen = new Map();
-    societies.forEach((s) => { if (s.city && !seen.has(s.city.id)) seen.set(s.city.id, s.city); });
-    return [...seen.values()];
+  const selectedSociety = societies.find((s) => s.id === values.societyId);
+
+  // Seed the typed city from whichever society this form already has
+  // selected (editing an existing location) — only once, so it doesn't
+  // fight with the member's own typing afterward.
+  useEffect(() => {
+    if (values.cityText === undefined && selectedSociety?.city) {
+      onChange({ cityText: selectedSociety.city.name });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSociety]);
+
+  const cityText = values.cityText || '';
+  const cityNames = useMemo(() => {
+    const seen = new Set();
+    societies.forEach((s) => { if (s.city?.name) seen.add(s.city.name); });
+    return [...seen];
   }, [societies]);
 
-  const selectedSociety = societies.find((s) => s.id === values.societyId);
-  const [cityId, setCityId] = useState('');
+  const matchedCity = cityText.trim()
+    ? societies.find((s) => s.city?.name.toLowerCase() === cityText.trim().toLowerCase())?.city
+    : null;
+  const societiesInCity = matchedCity ? societies.filter((s) => s.city?.id === matchedCity.id) : [];
 
-  useEffect(() => {
-    if (!cityId && selectedSociety?.city) setCityId(selectedSociety.city.id);
-  }, [selectedSociety, cityId]);
-
-  const societiesInCity = cityId ? societies.filter((s) => s.city?.id === cityId) : societies;
-
-  useEffect(() => {
-    if (!values.societyId) return setBlocks([]);
-    setBlocksLoading(true);
-    societiesService.listBlocks(values.societyId)
-      .then(setBlocks)
-      .catch(() => setBlocks([]))
-      .finally(() => setBlocksLoading(false));
-  }, [values.societyId]);
+  const onCityInput = (text) => {
+    // Typing a different city invalidates whatever society was picked for
+    // the old one — re-select is required rather than silently keeping a
+    // society that's no longer even shown.
+    onChange({ cityText: text, societyId: '', blockId: '' });
+  };
 
   const startRequest = () => {
     setRequesting(true);
-    onChange({ societyId: '', blockId: '', locationRequest: { cityName: '', societyName: '' } });
+    onChange({ societyId: '', blockId: '', locationRequest: { cityName: cityText, societyName: '' } });
   };
 
   const cancelRequest = () => {
@@ -65,9 +69,27 @@ export default function SocietyFields({ values, onChange }) {
     onChange({ locationRequest: { ...values.locationRequest, ...patch } });
   };
 
+  const addressField = (
+    <div className="field">
+      <label htmlFor="ob-address">Address</label>
+      <div className="input-wrap">
+        <span className="input-ic-badge"><Icon name="home" style={{ width: 14, height: 14 }} /></span>
+        <input
+          id="ob-address"
+          className="has-badge"
+          placeholder="e.g. B-402, near XYZ mall"
+          value={values.address || ''}
+          onChange={(e) => onChange({ address: e.target.value })}
+        />
+      </div>
+    </div>
+  );
+
   if (requesting || values.locationRequest) {
     return (
       <>
+        {addressField}
+
         <div className="field">
           <label htmlFor="ob-req-city">City</label>
           <div className="input-wrap">
@@ -96,6 +118,7 @@ export default function SocietyFields({ values, onChange }) {
           </div>
         </div>
 
+        {/* Block/Tower + Flat/Villa/Plot No. — on hold for now, not removed.
         <div className="field">
           <label htmlFor="ob-flat">Flat / Villa / Plot No. <span style={{ textTransform: 'none', fontWeight: 400 }}>(optional)</span></label>
           <div className="input-wrap">
@@ -109,6 +132,7 @@ export default function SocietyFields({ values, onChange }) {
             />
           </div>
         </div>
+        */}
 
         <button type="button" className="link-green" style={{ margin: '2px 0 16px' }} onClick={cancelRequest}>
           ← Pick from the list instead
@@ -119,20 +143,24 @@ export default function SocietyFields({ values, onChange }) {
 
   return (
     <>
+      {addressField}
+
       <div className="field">
         <label htmlFor="ob-city">City</label>
         <div className="input-wrap">
           <span className="input-ic-badge"><Icon name="mapPin" style={{ width: 14, height: 14 }} /></span>
-          <select
+          <input
             id="ob-city"
             className="has-badge"
-            value={cityId}
-            onChange={(e) => { setCityId(e.target.value); onChange({ societyId: '', blockId: '' }); }}
+            list="ob-city-list"
+            placeholder={loading ? 'Loading cities…' : 'Start typing your city'}
+            value={cityText}
+            onChange={(e) => onCityInput(e.target.value)}
             disabled={loading}
-          >
-            <option value="">{loading ? 'Loading cities…' : 'All cities'}</option>
-            {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          />
+          <datalist id="ob-city-list">
+            {cityNames.map((name) => <option key={name} value={name} />)}
+          </datalist>
         </div>
       </div>
 
@@ -145,14 +173,20 @@ export default function SocietyFields({ values, onChange }) {
             className="has-badge"
             value={values.societyId}
             onChange={(e) => onChange({ societyId: e.target.value, blockId: '' })}
-            disabled={loading}
+            disabled={loading || !matchedCity}
           >
-            <option value="">{loading ? 'Loading societies…' : 'Select your society'}</option>
+            <option value="">
+              {loading ? 'Loading societies…'
+                : !cityText.trim() ? 'Type your city first'
+                : !matchedCity ? "We don't have that city yet"
+                : societiesInCity.length ? 'Select your society' : 'No societies listed in this city yet'}
+            </option>
             {societiesInCity.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
       </div>
 
+      {/* Block/Tower + Flat/Villa/Plot No. — on hold for now, not removed.
       <div className="field-row">
         <div className="field">
           <label htmlFor="ob-block">
@@ -188,6 +222,7 @@ export default function SocietyFields({ values, onChange }) {
           </div>
         </div>
       </div>
+      */}
 
       <button type="button" className="link-green" style={{ margin: '2px 0 16px' }} onClick={startRequest}>
         Don&apos;t see your city or society? Request to add it

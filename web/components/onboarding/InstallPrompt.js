@@ -43,9 +43,14 @@ export default function InstallPrompt() {
   }, []);
 
   const canPrompt = !!deferred;
-  const showIosHint = isIos && !canPrompt;
 
-  if (standalone || installed || (!canPrompt && !showIosHint)) return null;
+  // Chrome only ever fires `beforeinstallprompt` once its own (undocumented,
+  // timing-dependent) engagement heuristics are satisfied — a fully valid
+  // manifest + active service worker (both true here) is necessary but not
+  // sufficient. Rendering nothing until then made this look broken even
+  // though nothing was actually wrong — every non-installed, non-iOS browser
+  // now gets the same kind of manual fallback iOS always had.
+  if (standalone || installed) return null;
 
   const install = async () => {
     if (!deferred) return;
@@ -65,8 +70,10 @@ export default function InstallPrompt() {
             Add it to your home screen for a full-screen, offline-ready app.{' '}
             <button className="link-green" onClick={install} style={{ fontSize: 12 }}>Install now</button>
           </>
-        ) : (
+        ) : isIos ? (
           <>Tap Share, then &ldquo;Add to Home Screen&rdquo; to install KitabX.</>
+        ) : (
+          <>Open your browser menu (⋮) and tap &ldquo;Install app&rdquo; or &ldquo;Add to Home screen&rdquo;.</>
         )}
       </span>
     </div>

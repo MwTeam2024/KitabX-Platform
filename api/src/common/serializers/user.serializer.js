@@ -30,6 +30,7 @@ export function toSelfUser(user) {
     phone: user.phone,
     email: user.email,
     flatUnit: user.flatUnit,
+    address: user.address,
     verificationStatus: user.verificationStatus,
     isActive: user.isActive,
     city: user.city ? { id: user.city.id, name: user.city.name } : null,

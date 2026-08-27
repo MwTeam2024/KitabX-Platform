@@ -57,6 +57,7 @@ export class AuthController {
       societyId: body.societyId,
       blockId: body.blockId,
       flatUnit: body.flatUnit,
+      address: body.address,
       acceptedTerms: body.acceptedTerms,
       locationRequest: body.locationRequest,
     });

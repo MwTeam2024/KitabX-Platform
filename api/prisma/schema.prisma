@@ -22,6 +22,7 @@ model User {
   societyId           String?                     @map("society_id")
   blockId             String?                     @map("block_id")
   flatUnit            String?                     @map("flat_unit")
+  address             String?
   verificationStatus  VerificationStatus          @default(PENDING) @map("verification_status")
   isActive            Boolean                     @default(true) @map("is_active")
   acceptedTermsAt     DateTime?                   @map("accepted_terms_at")
