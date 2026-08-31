@@ -12,22 +12,39 @@ export function startScan(videoEl, onResult, onError) {
   let controls = null;
   let stopped = false;
 
+  const handleFrame = (result, err) => {
+    if (stopped) return;
+    if (result) {
+      stopped = true;
+      controls?.stop();
+      onResult(result.getText());
+    } else if (err && !(err instanceof NotFoundException)) {
+      onError?.(err);
+    }
+  };
+
+  const attach = (c) => {
+    if (stopped) c.stop();
+    else controls = c;
+  };
+
   reader
-    .decodeFromVideoDevice(undefined, videoEl, (result, err) => {
+    .decodeFromVideoDevice(undefined, videoEl, handleFrame)
+    .then(attach)
+    .catch((err) => {
       if (stopped) return;
-      if (result) {
-        stopped = true;
-        controls?.stop();
-        onResult(result.getText());
-      } else if (err && !(err instanceof NotFoundException)) {
+      // A bare `facingMode` constraint is spec'd as a hint, not a hard
+      // requirement, but some devices/browsers reject it outright — retry
+      // with no facing preference before surfacing a real camera failure.
+      if (err?.name === 'OverconstrainedError') {
+        reader
+          .decodeFromConstraints({ video: true }, videoEl, handleFrame)
+          .then(attach)
+          .catch((err2) => onError?.(err2));
+      } else {
         onError?.(err);
       }
-    })
-    .then((c) => {
-      if (stopped) c.stop();
-      else controls = c;
-    })
-    .catch((err) => onError?.(err));
+    });
 
   return () => {
     stopped = true;

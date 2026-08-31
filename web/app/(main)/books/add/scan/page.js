@@ -12,6 +12,30 @@ import { startScan as startCameraScan } from '@/lib/barcode';
 import { useToast } from '@/components/ui/ToastProvider';
 
 /**
+ * getUserMedia failures all surface through one generic error, but the fix
+ * differs completely by cause — tell the user which one they actually hit
+ * instead of a single "check permissions" message that fits none of them.
+ */
+function cameraErrorMessage(err) {
+  if (typeof window !== 'undefined' && (!window.isSecureContext || !navigator.mediaDevices)) {
+    return "This page isn't loaded over a secure (https) connection, so the browser won't allow camera access here.";
+  }
+  switch (err?.name) {
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return 'Camera permission is blocked for this site. Tap the lock/info icon next to the address bar, allow Camera, then try again — also check your phone\'s system settings if the browser itself has camera access turned off.';
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return "No usable camera was found on this device.";
+    case 'NotReadableError':
+    case 'TrackStartError':
+      return 'The camera is already in use by another app. Close it and try again.';
+    default:
+      return `Could not access the camera${err?.message ? ` (${err.message})` : ''}. You can enter the details manually instead.`;
+  }
+}
+
+/**
  * Screen 07 — ISBN barcode scan (§6A). The camera + barcode library live in
  * `lib/barcode.js`; the resolved ISBN is looked up through NestJS → Google Books
  * so the API key never reaches the browser.
@@ -22,6 +46,7 @@ export default function ScanIsbnPage() {
   const { patchDraft } = useBookDraft();
   const [state, setState] = useState('idle'); // idle | scanning | looking-up | match | notfound
   const [match, setMatch] = useState(null);
+  const [cameraError, setCameraError] = useState(null);
   const videoRef = useRef(null);
   const stopScanRef = useRef(null);
 
@@ -42,6 +67,7 @@ export default function ScanIsbnPage() {
   };
 
   const startScan = () => {
+    setCameraError(null);
     setState('scanning');
   };
 
@@ -50,8 +76,10 @@ export default function ScanIsbnPage() {
     stopScanRef.current = startCameraScan(
       videoRef.current,
       (text) => lookupIsbn(text),
-      () => {
-        showToast('Could not access the camera — check permissions or enter details manually');
+      (err) => {
+        const message = cameraErrorMessage(err);
+        setCameraError(message);
+        showToast(message);
         setState('idle');
       },
     );
@@ -83,6 +111,16 @@ export default function ScanIsbnPage() {
 
         {state === 'idle' && (
           <>
+            {cameraError && (
+              <div
+                style={{
+                  background: 'var(--sindoor-soft)', color: 'var(--sindoor)', borderRadius: 12,
+                  padding: '12px 14px', fontSize: 12.5, lineHeight: 1.5, marginBottom: 14,
+                }}
+              >
+                {cameraError}
+              </div>
+            )}
             <button
               style={{
                 background: 'linear-gradient(160deg,#1B5E37,var(--brand-deep))',

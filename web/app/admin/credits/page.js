@@ -21,6 +21,9 @@ export default function AdminCreditsPage() {
     if (!form.userId && admin.users.length) setForm((f) => ({ ...f, userId: admin.users[0].id }));
   }, [admin.users, form.userId]);
 
+  const selectedUser = admin.users.find((u) => u.id === form.userId);
+  const creditsByUserId = new Map(admin.users.map((u) => [u.id, u.credits ?? 0]));
+
   const apply = async () => {
     const amount = parseInt(form.amount, 10);
     if (!amount) return showToast('Enter a valid non-zero amount, e.g. +1 or -1');
@@ -50,6 +53,11 @@ export default function AdminCreditsPage() {
             <select id="cc-user" value={form.userId} onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}>
               {admin.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
+            {selectedUser && (
+              <div style={{ fontSize: 12.5, color: 'var(--outer-muted)', marginTop: 4 }}>
+                Current balance: <b style={{ color: 'var(--brand-2)' }}>{selectedUser.credits ?? 0} credits</b>
+              </div>
+            )}
           </div>
           <div className="field-row">
             <div className="field">
@@ -76,7 +84,7 @@ export default function AdminCreditsPage() {
       <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
-            <tr><th>User</th><th>Change</th><th>Reason</th></tr>
+            <tr><th>User</th><th>Change</th><th>Reason</th><th>Current Balance</th></tr>
           </thead>
           <tbody>
             {admin.creditsLedger.map((row, i) => (
@@ -84,10 +92,11 @@ export default function AdminCreditsPage() {
                 <td>{row.user}</td>
                 <td style={{ color: row.positive ? 'var(--brand-2)' : 'var(--sindoor)' }}>{row.change}</td>
                 <td>{row.reason}</td>
+                <td>{creditsByUserId.has(row.userId) ? `${creditsByUserId.get(row.userId)} credits` : '—'}</td>
               </tr>
             ))}
             {!admin.creditsLedger.length && (
-              <tr><td colSpan={3} style={{ color: 'var(--outer-muted)' }}>No manual corrections yet.</td></tr>
+              <tr><td colSpan={4} style={{ color: 'var(--outer-muted)' }}>No manual corrections yet.</td></tr>
             )}
           </tbody>
         </table>

@@ -7,6 +7,13 @@ import { resizeImageFile } from '@/lib/image';
 /**
  * Camera/file picker. Images are resized client-side before they'd be uploaded,
  * which the PWA spec (§17) requires. Falls back gracefully if resizing fails.
+ *
+ * `capture` (default true) sets `capture="environment"` on the file input —
+ * on mobile this makes the browser launch the camera directly, but it also
+ * suppresses the normal OS chooser that would otherwise offer "Take Photo"
+ * AND "Photo Library"/gallery together in one native sheet. Screens that
+ * need both should pass `capture={false}` to get that native chooser back,
+ * instead of only ever being able to reach the camera.
  */
 export default function UploadBox({
   label = 'Tap to take / upload cover image',
@@ -14,6 +21,7 @@ export default function UploadBox({
   minHeight,
   onFile,
   resizeOptions,
+  capture = true,
 }) {
   const inputRef = useRef(null);
   const [done, setDone] = useState(false);
@@ -53,7 +61,7 @@ export default function UploadBox({
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
+        capture={capture ? 'environment' : undefined}
         hidden
         onChange={handleChange}
       />

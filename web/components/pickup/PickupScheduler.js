@@ -12,7 +12,7 @@ import { useSheet } from '@/components/ui/SheetProvider';
 import { useToast } from '@/components/ui/ToastProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { useInterval } from '@/hooks/useInterval';
-import { nextPickupDates } from '@/lib/dates';
+import { nextPickupDates, formatPickupDate, tomorrowIsoDate } from '@/lib/dates';
 import { useIsClient } from '@/hooks/useClientOnly';
 import { PICKUP_POINTS, PICKUP_TIME_SLOTS } from '@/lib/constants';
 import { firstName } from '@/lib/exchange';
@@ -236,16 +236,38 @@ export default function PickupScheduler({ exchangeId }) {
               <div className="field">
                 <label>Date</label>
                 {dates.length
-                  ? <PillSelect options={dates} value={date} onChange={setPickedDate} />
+                  ? (
+                    <PillSelect
+                      options={dates}
+                      value={date}
+                      onChange={setPickedDate}
+                      allowOther
+                      otherType="date"
+                      otherMin={tomorrowIsoDate()}
+                      formatOther={formatPickupDate}
+                    />
+                  )
                   : <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Loading dates…</div>}
               </div>
               <div className="field">
                 <label>Time slot</label>
-                <PillSelect options={PICKUP_TIME_SLOTS} value={slot} onChange={setSlot} />
+                <PillSelect
+                  options={PICKUP_TIME_SLOTS}
+                  value={slot}
+                  onChange={setSlot}
+                  allowOther
+                  otherPlaceholder="e.g. 5–6 PM"
+                />
               </div>
               <div className="field">
                 <label>Pickup point</label>
-                <PillSelect options={PICKUP_POINTS} value={point} onChange={setPoint} />
+                <PillSelect
+                  options={PICKUP_POINTS}
+                  value={point}
+                  onChange={setPoint}
+                  allowOther
+                  otherPlaceholder="e.g. Basement parking"
+                />
               </div>
               <div className="field">
                 <label htmlFor="pickup-note">
@@ -298,16 +320,38 @@ function SuggestTimeForm({ dates, pickup, onSubmit }) {
       <div className="field">
         <label>Date</label>
         {dates.length
-          ? <PillSelect options={dates} value={pickedDate} onChange={setPickedDate} />
+          ? (
+            <PillSelect
+              options={dates}
+              value={pickedDate}
+              onChange={setPickedDate}
+              allowOther
+              otherType="date"
+              otherMin={tomorrowIsoDate()}
+              formatOther={formatPickupDate}
+            />
+          )
           : <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Loading dates…</div>}
       </div>
       <div className="field">
         <label>Time slot</label>
-        <PillSelect options={PICKUP_TIME_SLOTS} value={slot} onChange={setSlot} />
+        <PillSelect
+          options={PICKUP_TIME_SLOTS}
+          value={slot}
+          onChange={setSlot}
+          allowOther
+          otherPlaceholder="e.g. 5–6 PM"
+        />
       </div>
       <div className="field">
         <label>Pickup point</label>
-        <PillSelect options={PICKUP_POINTS} value={point} onChange={setPoint} />
+        <PillSelect
+          options={PICKUP_POINTS}
+          value={point}
+          onChange={setPoint}
+          allowOther
+          otherPlaceholder="e.g. Basement parking"
+        />
       </div>
       <div className="field">
         <label htmlFor="suggest-note">

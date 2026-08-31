@@ -1,4 +1,4 @@
-import { Dependencies, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Dependencies, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../common/redis/redis.service';
 
@@ -48,8 +48,14 @@ export class GoogleBooksService {
   async _fetchJson(url) {
     const res = await fetch(url);
     if (!res.ok) {
-      this.logger.warn(`Google Books request failed: ${res.status}`);
-      return null;
+      const body = await res.text().catch(() => '');
+      // A non-2xx here means Google Books itself is unreachable/misconfigured
+      // (bad or missing API key, quota exhausted) — genuinely distinct from
+      // "the book doesn't exist", which is an empty `items` array on a 200.
+      // Swallowing this into a plain [] made a missing GOOGLE_BOOKS_API_KEY
+      // indistinguishable from "no results found" everywhere this is called.
+      this.logger.error(`Google Books request failed (${res.status}): ${body.slice(0, 300)}`);
+      throw new ServiceUnavailableException('Book lookup service is temporarily unavailable. Try again shortly or enter details manually.');
     }
     return res.json();
   }

@@ -347,8 +347,12 @@ export function AppDataProvider({ children }) {
   const loadAdminCreditsLedger = useCallback(async () => setAdminCreditsLedger(await adminService.creditsLedger()), []);
   const submitAdminCreditCorrection = useCallback(async (userId, amount, reason) => {
     await adminService.correctCredit(userId, amount, reason);
-    await loadAdminCreditsLedger();
-  }, [loadAdminCreditsLedger]);
+    // Task 57 — the ledger and the per-user "current balance" it now shows
+    // both read from `admin.users`, so that needs refreshing too, not just
+    // the ledger rows, or the balance just displayed would go stale the
+    // instant this correction is the thing that changed it.
+    await Promise.all([loadAdminCreditsLedger(), loadAdminUsers()]);
+  }, [loadAdminCreditsLedger, loadAdminUsers]);
 
   const loadAdminReports = useCallback(async (status) => setAdminReports(await adminService.listReports(status)), []);
   const resolveAdminReport = useCallback(async (id) => {

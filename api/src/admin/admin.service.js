@@ -118,6 +118,17 @@ export class AdminService {
       ]),
     );
 
+    // Task 57 — the admin credit section needs each user's current balance,
+    // not just the raw correction ledger. Same `availableBalance` field the
+    // member-facing header/credits page shows as "N credits", batched in one
+    // query rather than N (CreditAccount rows are created lazily via
+    // CreditsService#getBalance's upsert, so a user who never triggered that
+    // simply has no row yet — treat as 0, not an error).
+    const creditAccounts = await this.prisma.creditAccount.findMany({
+      where: { userId: { in: users.map((u) => u.id) } },
+    });
+    const creditsMap = new Map(creditAccounts.map((a) => [a.userId, a.availableBalance]));
+
     return users.map((u) => ({
       ...toPublicUser(u),
       phone: u.phone,
@@ -127,6 +138,7 @@ export class AdminService {
       status: !u.isActive ? 'suspended' : u.verificationStatus === 'PENDING' ? 'pending' : 'active',
       verified: u.verificationStatus === 'VERIFIED',
       rating: ratingMap.get(u.id) || null,
+      credits: creditsMap.get(u.id) || 0,
     }));
   }
 
@@ -526,6 +538,7 @@ export class AdminService {
       take: 200,
     });
     return rows.map((r) => ({
+      userId: r.userId,
       user: r.user.name,
       change: r.amount > 0 ? `+${r.amount}` : `${r.amount}`,
       positive: r.amount > 0,

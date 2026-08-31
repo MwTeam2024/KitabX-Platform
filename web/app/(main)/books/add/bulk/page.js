@@ -137,6 +137,7 @@ export default function BulkUploadPage() {
               minHeight={170}
               onFile={runScan}
               resizeOptions={{ maxWidth: 1600, quality: 0.85 }}
+              capture={false}
             />
             <NoteBox icon="info" style={{ marginTop: 14 }}>
               You&apos;ll review every detected book and can edit or remove any before publishing.
