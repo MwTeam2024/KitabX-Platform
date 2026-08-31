@@ -7,6 +7,7 @@ import ScreenHeader from '@/components/ui/ScreenHeader';
 import NoteBox from '@/components/ui/NoteBox';
 import EmptyState from '@/components/ui/EmptyState';
 import PillSelect from '@/components/ui/PillSelect';
+import CancelReasonForm from '@/components/exchange/CancelReasonForm';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useSheet } from '@/components/ui/SheetProvider';
 import { useToast } from '@/components/ui/ToastProvider';
@@ -16,14 +17,6 @@ import { nextPickupDates, formatPickupDate, tomorrowIsoDate } from '@/lib/dates'
 import { useIsClient } from '@/hooks/useClientOnly';
 import { PICKUP_POINTS, PICKUP_TIME_SLOTS } from '@/lib/constants';
 import { firstName } from '@/lib/exchange';
-
-/** PDF Module 8 step 9 — cancelling requires a reason and releases the credit. */
-const CANCEL_REASONS = [
-  'Timing issue',
-  'Book no longer available',
-  'Request made by mistake',
-  'Unable to contact the other user',
-];
 
 /**
  * Screen 15. Fixed slots + predefined society pickup points, one reschedule,
@@ -366,26 +359,6 @@ function SuggestTimeForm({ dates, pickup, onSubmit }) {
       <button className="btn btn-primary" onClick={submit} disabled={saving || !pickedDate}>
         {saving ? 'Sending…' : 'Send new time'}
       </button>
-    </>
-  );
-}
-
-function CancelReasonForm({ onSubmit }) {
-  const [reason, setReason] = useState(CANCEL_REASONS[0]);
-  return (
-    <>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '-8px 0 14px' }}>
-        Any reserved credit is returned automatically.
-      </div>
-      <div className="reason-list">
-        {CANCEL_REASONS.map((r) => (
-          <label className="reason-item" key={r}>
-            <input type="radio" name="cancel-reason" checked={reason === r} onChange={() => setReason(r)} />
-            {r}
-          </label>
-        ))}
-      </div>
-      <button className="btn btn-primary" onClick={() => onSubmit(reason)}>Cancel exchange</button>
     </>
   );
 }

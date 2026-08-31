@@ -207,7 +207,6 @@ export class RequestsService {
       if (!ACTIVE_REQUEST_STATUSES.includes(request.status)) {
         throw new BadRequestException(`Cannot cancel a request that is already ${request.status.toLowerCase()}`);
       }
-
       await tx.bookRequest.update({
         where: { id: requestId },
         data: { status: 'CANCELLED', cancelledAt: new Date(), cancellationReason: reason || null },

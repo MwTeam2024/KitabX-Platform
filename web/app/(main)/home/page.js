@@ -37,14 +37,16 @@ export default function HomePage() {
 
   const [query, setQuery] = useState('');
   const [genre, setGenre] = useState('All');
+  const [language, setLanguage] = useState(null);
+  const [condition, setCondition] = useState(null);
   const [sort, setSort] = useState('newest');
   const [includeNearby, setIncludeNearby] = useState(false);
   const debouncedQuery = useDebounce(query, 300);
 
   useEffect(() => {
-    searchBooks({ radiusKm, genre, q: debouncedQuery, sort, includeNearby }).catch(() => {});
+    searchBooks({ radiusKm, genre, language, condition, q: debouncedQuery, sort, includeNearby }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [radiusKm, genre, debouncedQuery, sort, includeNearby]);
+  }, [radiusKm, genre, language, condition, debouncedQuery, sort, includeNearby]);
 
   useEffect(() => {
     discoveryService.stats().then(setStats).catch(() => {});
@@ -69,8 +71,15 @@ export default function HomePage() {
   const openFilters = () => {
     openSheet('Search & Filters', (
       <FilterSheet
-        totalBooks={books.length}
-        onApply={({ resultCount }) => showToast(`Showing ${resultCount} books`)}
+        genre={genre}
+        language={language}
+        condition={condition}
+        onApply={(next) => {
+          setGenre(next.genre || 'All');
+          setLanguage(next.language);
+          setCondition(next.condition);
+          showToast('Filters applied');
+        }}
         onClose={closeSheet}
       />
     ));

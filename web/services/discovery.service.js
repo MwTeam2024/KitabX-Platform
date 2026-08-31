@@ -6,11 +6,12 @@ import { apiClient } from "@/lib/api-client";
  * the client.
  */
 export const discoveryService = {
-  search: ({ radiusKm, genre, language, q, sort, includeNearby } = {}) => {
+  search: ({ radiusKm, genre, language, condition, q, sort, includeNearby } = {}) => {
     const params = new URLSearchParams();
     if (radiusKm != null) params.set("radiusKm", radiusKm);
     if (genre && genre !== "All") params.set("genre", genre);
     if (language) params.set("language", language);
+    if (condition) params.set("condition", condition);
     if (q) params.set("q", q);
     if (sort) params.set("sort", sort);
     if (includeNearby === false) params.set("includeNearby", "false");

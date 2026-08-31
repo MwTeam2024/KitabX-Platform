@@ -1808,7 +1808,7 @@ shows all 4 tabs at full width with no stray scrollbar. Also re-verified
 My Shelf's 3-tab bar and the auth 2-tab bar render identically to before
 (full-width, evenly stretched, no scrolling needed).
 
-## Task 54 — ISBN barcode scanner doesn't open the camera on mobile ⬜ (fix shipped, pending your retest)
+## Task 54 — ISBN barcode scanner doesn't open the camera on mobile ✅ (confirmed working on real device)
 The "scan ISBN code" feature blocks the phone's camera from opening at
 all on mobile (works differently than desktop, per user report).
 
@@ -1898,6 +1898,9 @@ as the original camera-access bug. This is a solid, well-understood fix
 based on ZXing's own documented defaults, not a guess, but it still
 needs a real retest on the phone to confirm it actually resolves the
 scan-never-registers symptom.
+
+**Confirmed by user on a real device**: camera opens and barcode scanning
+now works correctly end-to-end. Closing this out.
 
 ## Task 55 — "Search by title and author" is non-functional ✅
 Confirmed with the user this meant the "Add a book" flow's step 2 option
@@ -2254,22 +2257,109 @@ the individual lending member actually uploaded of their own physical
 copy, a mismatch is a data-entry issue for that one test listing, not
 something the code got wrong.
 
-## Task 61 — Book cancellation reason for both owner and buyer, surfaced in notifications ⬜
+## Task 61 — Book cancellation reason for both owner and buyer, surfaced in notifications ✅
 A cancellation reason must be captured from whichever side cancels
 (owner or buyer), but only once the book request has already been
 accepted by the owner (not for a plain pending-request cancellation).
 The reason must also be shown in the notification itself, not just
 somewhere in-app.
 
-## Task 62 — Remove the tick/checkmark icon from Notification Preferences (next to Clear all) ⬜
+**Investigation.** Reason-capture already existed, but only in one of
+two places: `PickupScheduler.js`'s cancel sheet (a `CancelReasonForm`
+with a fixed 4-option radio list, reachable once a request is accepted).
+The gap was `ExchangeDetailView.js` — the main exchange screen — whose
+own "Cancel" button called `cancelExchange(exchange.id)` with **no
+reason at all**, and was reachable at every non-terminal stage including
+already-accepted ones, for both roles (no role gating in the JSX). The
+backend (`requests.service.js#cancel`) already accepted an optional
+`reason` and — this part needed no change — already appended it to the
+other party's notification body whenever one was supplied
+(`` `...was cancelled${reason ? ` — ${reason}` : ''}.` ``); the only real
+gaps were (a) that second UI entry point never supplying one, and (b)
+nothing server-side actually requiring one once a request moves past
+`REQUESTED`.
+
+**Fix:**
+- `apps/api/src/requests/requests.service.js#cancel` — now throws
+  `BadRequestException('A reason is required to cancel an accepted
+  exchange')` when `request.status !== 'REQUESTED'` and no reason is
+  given, so the rule holds even if a client ever skips the prompt —
+  cancelling a still-pending request is untouched, exactly as the task
+  asked.
+- Extracted `PickupScheduler.js`'s inline `CancelReasonForm` (+ its
+  `CANCEL_REASONS` list) into a new shared
+  `apps/web/components/exchange/CancelReasonForm.js`, so it's one
+  component instead of a near-duplicate in two places.
+- `ExchangeDetailView.js` — `onCancel` now branches on
+  `exchange.stage === 'requested'`: pending stays a direct one-tap cancel
+  with no prompt (unchanged); anything past that opens the same
+  `CancelReasonForm` sheet used by PickupScheduler, for either role, since
+  the button itself was never role-gated to begin with.
+
+**Verified live end-to-end**, both roles, both the UI and the API
+directly:
+- As the real requester on a genuine `ACCEPTED` exchange ("Test Accept
+  Flow Book"): tapped Cancel on the exchange detail page, confirmed the
+  reason sheet now appears (it didn't before), picked "Unable to contact
+  the other user", submitted, and confirmed via a direct DB query both
+  that `BookRequest.cancellationReason` was persisted correctly **and**
+  that the real notification row created for the other party (the owner)
+  has body `"The exchange for \"Test Accept Flow Book\" was cancelled —
+  Unable to contact the other user."` — the reason genuinely reaches the
+  notification, not just the UI.
+- Backend validation, via direct authenticated API calls bypassing the
+  UI entirely: cancelling a different real `ACCEPTED` request with an
+  empty body correctly 400s with the new message; the identical request
+  immediately after, with a real reason, succeeds (201).
+- Pending-stage regression check: created a fresh `REQUESTED` request via
+  the real API and cancelled it with an empty body — succeeds (201), no
+  reason required, confirming the "not for a plain pending-request
+  cancellation" rule holds.
+- Logged in as the real *owner* of a separate accepted (`pickup-proposed`
+  stage) exchange and confirmed the Cancel button on `ExchangeDetailView`
+  also opens the same reason sheet for that role — the fix isn't
+  requester-only.
+
+**Revised after user feedback: made optional, not required.** The user
+clarified the reason should be optional at the accepted stage too, not
+mandatory — reverted the backend's `BadRequestException` requiring one,
+and changed `CancelReasonForm` to start with nothing pre-selected
+(previously a reason was always pre-checked, so the UI never actually
+let anyone submit without one even before the mandatory backend check
+existed) plus relabelled the sheet's copy to "Reason (optional)".
+Verified live end-to-end again after the change: a direct API call
+cancelling a real accepted exchange with an empty body now succeeds
+(no more 400), the resulting notification reads the clean
+`"...was cancelled."` with no dangling `" — "` when no reason is given;
+and — through the real browser UI this time, not just curl — opened a
+fresh accepted exchange's cancel sheet, confirmed no radio is
+pre-selected, and submitted with none picked, which cancelled correctly
+with a normal success toast.
+
+## Task 62 — Remove the tick/checkmark icon from Notification Preferences (next to Clear all) ✅
 User attached a screenshot of the Notifications page — remove the
 checkmark icon sitting to the right of "Clear all".
+
+**Fix**: `app/(main)/notifications/page.js` — that button dispatched
+`markAllRead()`; removed the button (and the now-unused `markAllRead`
+import) and simplified the header's `right` slot back to just the
+"Clear all" button, no longer wrapped in a flex row that existed purely
+to hold both buttons.
+
+**Verified live**: confirmed the icon is gone and "Clear all" still
+works correctly (cleared a real account's notifications, list emptied,
+subtitle correctly updated to "You're all caught up", and the header's
+right-side controls correctly disappear entirely when there's nothing
+left to clear — pre-existing behavior, unaffected). Re-checked with a
+second account that still had notifications to confirm the header layout
+looks clean with just "Clear all" alone, at both desktop and 375px
+mobile width, with no leftover spacing from the removed button.
 
 ## Task 63 — Remove the wishlist (heart) icon from the book detail page ⬜
 User attached a screenshot of a book detail page — remove the heart/
 wishlist icon shown top-right of that page.
 
-## Task 64 — "Not signed in" error when listing a book manually right after OTP signup ⬜ (code fix shipped, needs a Vercel dashboard env-var change to activate)
+## Task 64 — "Not signed in" error when listing a book manually right after OTP signup ✅ (confirmed working on real device)
 User reported: signed up using the OTP shown on screen (dev OTP), then
 tried to list a book manually on their phone, and got a "not signed in"
 error even though signup/OTP verification had just succeeded.
@@ -2340,6 +2430,10 @@ keeps working exactly as it does today (calling Render directly) since
 the rewrite is a no-op without `BACKEND_API_URL` — this change is inert
 until that env var is set.
 
+**User set the env vars, redeployed, and confirmed on a real iPhone**:
+signing up and immediately listing a book no longer throws "Not signed
+in." Closing this out.
+
 ## Task 65 — Manual "Enter details" photo slots force camera-only, same as bulk upload did ✅
 The manual add-a-book flow's 3 photo slots (Cover/Photo 2/Photo 3) needed
 the same "Take Photo or Choose from Gallery" native-chooser fix already
@@ -2364,3 +2458,154 @@ correctly uploaded to `POST /uploads/listing-photo` (201 Created) and
 the UI updated to "1/3 photos added" with the cover slot showing the
 uploaded image, proving the fix didn't disturb the working upload
 pipeline.
+
+## Task 66 — Remove owner-only actions (Edit/Pause/Remove listing) from Received and Given books on My Shelf ✅
+On My Shelf's "Received" and "Given" tabs, tapping "View" on a book opened
+the same detail page as an active listing, which showed "Edit listing" /
+"Pause listing" / "Remove listing" — these only make sense for a book
+the viewer still actively owns and lists, not one they've received from
+someone else or already given away.
+
+**Investigation.** `BookDetailView.js` gated all owner actions on one flag,
+`const mine = !!book.mine`. Traced where that flag actually comes from
+(`AppDataContext.js#refreshMyBooks`): "My Books" gets real ownership from
+the backend, but **received books have `mine` force-set to `true`** —
+deliberately, but only so `books/page.js`'s tab-bucketing (`Object.values(
+books).filter(b => b.mine)`, then split further by `b.status`) can find
+received/given rows through one shared flag. `BookDetailView.js` reuses
+that same overloaded flag for owner-permission purposes, which is where
+it breaks — a received book was never actually owned by the viewer, and a
+given-away book, while genuinely once-owned, has a COMPLETED exchange
+with nothing left to manage (the backend's own `removeListing`/`setPaused`
+already reject actions on a COMPLETED listing).
+
+**A second, subtler bug found while fixing this**: Task 60 made the detail
+page always call the generic `GET /listings/:id` endpoint on mount and
+merge the result over the cache. That endpoint's `isMine` is a plain
+"are you this listing's real owner" check — for a *receiver* viewing a
+book they received, that's correctly `false` server-side, and the
+server's own `_statusLabel(listing, isMine=false)` has no concept of
+"received by this specific viewer" at all — it just returns `'Available'`
+for a non-owner viewing *any* non-reserved listing, including a
+COMPLETED one. Combined, Task 60's fresh-fetch would have **silently
+overwritten** a received book's correct `mine:true, status:'Received'`
+framing back to `mine:false, status:'Available'` the moment this task's
+fetch-on-mount fired — reintroducing a *worse* bug (a "Request this book"
+button on an already-completed exchange) while fixing this one, had it
+gone unnoticed.
+
+**Fix:**
+- `AppDataContext.js#ensureBookDetail` — when the already-cached entry for
+  a book is tagged `'Received'` or `'Given away'`, the fresh fetch now
+  enriches it with the fuller fields (description, publisher, pageCount,
+  ...) but preserves the existing `mine`/`status`/`receivedAt`, instead of
+  letting the generic endpoint's owner-blind view clobber that
+  viewer-specific framing.
+- `BookDetailView.js` — new `canManage = mine && book.status !== 'Given away'
+  && book.status !== 'Received'`, used (instead of the raw `mine` flag) to
+  gate the "How credits work" note + Pause/Reactivate block, and the
+  sticky action bar's Edit/Remove branch. For a `mine`-but-not-`canManage`
+  book (Given/Received), the entire sticky action bar is now omitted
+  outright — there's nothing to request, cancel, edit, or remove once an
+  exchange is done. `mine` itself is left untouched everywhere else (the
+  address-reveal and Report-listing logic), since those weren't part of
+  what was asked and already behaved reasonably.
+
+**Verified live** with three real accounts/scenarios on local dev (shared
+DB with production): an active "My Books" listing (Live Browser's "Task 40
+Bug Repro Book") still correctly shows "How credits work", "Pause
+listing", "Edit listing", "Remove listing" — confirming no regression;
+Live Browser's one "Given away" listing ("Task 35 Clean Trigger Book")
+now shows none of that and no action bar at all; and — logging in as
+Priya Sharma, a real account with a genuine completed "Received" exchange
+for "Sapiens" — confirmed the same, plus confirmed the owner's address
+still correctly shows as block-level only (not the full address), proving
+the preserved `mine` flag didn't leak into the separate address-reveal
+logic. All three checked via real page navigation and `get_page_text`,
+not assumed from code alone.
+
+## Task 67 — Home page "Search & Filters" sheet (Genre/Language/Condition) doesn't actually filter, from either of its 2 entry points ✅
+The "Search & Filters" bottom sheet on the home page — reachable from two
+separate places there — didn't apply Genre/Language/Condition filtering
+at all when "Show N books" was tapped. Discovery-radius filtering inside
+this same sheet was skipped/deprioritized per the user (it already
+worked — see below).
+
+**Investigation.** Confirmed both entry points (the sliders icon next to
+the search box, and an identical sliders icon inside `GenreChips.js`)
+open the exact same `FilterSheet`, via the same `openFilters` in
+`home/page.js`. The sheet itself was a fully disconnected mock: it kept
+its own local `selected` state and computed a **fake** "Show N books"
+count via plain arithmetic (`totalBooks - activeCount*4 - radiusSteps`)
+— never a real query. Worse, when "Show N books" was tapped, the parent's
+`onApply` handler was `({ resultCount }) => showToast(...)` — it
+destructured out only the fake count and **silently discarded**
+`genre`/`lang`/`cond` entirely. Selections never reached any state that
+fed the actual `searchBooks` call.
+
+Two further, independent bugs surfaced once tracing this against real
+data (checked directly against the shared DB, not assumed):
+- `CONDITION_FILTERS` in the old sheet was `['New', 'Like New', 'Good',
+  'Fair']` — real listings are only ever created with 'Brand New',
+  'Like New', 'Good', or 'Well Read' (`lib/mockData.js`'s `CONDITIONS`,
+  the same list the add-book form uses). 'New' and 'Fair' were never
+  real values at all — those two chips could never have matched
+  anything even if wired up correctly.
+- Real listing data has **inconsistent casing** for `condition`
+  ("Good" × 9, "GOOD" × 21 within the test society alone) and for
+  `languageCode` ("English" vs "en"). An exact-match filter would
+  silently miss whichever casing wasn't typed — this was a real,
+  measured gap, not a hypothetical.
+- A latent bug from Task 59's era, now newly exposed: `discovery.service.js`
+  built `genre` and `language` as two separate `book: {...}` object
+  spreads in the same `where` clause — the second spread would have
+  **silently clobbered the first** the moment both were ever supplied
+  together (plain object spread replaces the whole `book` key, it
+  doesn't merge). Harmless while the frontend never sent `language` at
+  all; about to become a live bug the moment this fix let the sheet send
+  both at once.
+- `radiusKm` inside the sheet, by contrast, already worked — `adjustRadius`
+  dispatches to the same global Redux `locationSlice` the main page's
+  `radiusKm` reads from `searchBooks`, so it was never dead state like
+  the other three; left untouched per the user's own instruction to skip it.
+
+**Fix:**
+- `apps/api/src/discovery/discovery.controller.js` /
+  `discovery.service.js` — added `condition` support end-to-end (a plain
+  `BookListing.condition` filter, case-insensitive); merged `genre` and
+  `language` into one `bookFilter` object instead of two colliding
+  spreads; made `language` case-insensitive too.
+- `apps/web/services/discovery.service.js` — passes `condition` through
+  to the query string alongside the existing params.
+- `apps/web/components/discovery/FilterSheet.js` — rewritten as a
+  properly *controlled* component: takes `genre`/`language`/`condition`
+  as props (so reopening it reflects whatever's actually applied),
+  single-select per group (tap again to clear) rather than multi-select
+  arrays the backend has no "OR" support for, corrected `CONDITION_FILTERS`
+  to the real values, dropped an ad-hoc extra `'Marathi'` language option
+  that wasn't in the canonical list used at listing-creation time, and
+  removed the fake result-count arithmetic entirely — the button just
+  says "Apply filters" now rather than presenting a number nobody
+  computed for real.
+- `apps/web/app/(main)/home/page.js` — added real `language`/`condition`
+  state, included both in the `searchBooks` call and its effect
+  dependencies, and rewrote `openFilters`'s `onApply` to actually call
+  `setGenre`/`setLanguage`/`setCondition` instead of discarding them.
+
+**Verified live end-to-end** against real, precisely-known data (checked
+DB values first so the test had a known-correct answer, not a guess):
+filtering by "Good" condition correctly returned all 12 real listings
+whose stored condition is "Good" **or** "GOOD" (confirmed via the actual
+network response body — every returned `cond` was one of those two,
+case-insensitively matched) and correctly excluded a real "Physical
+Education" listing whose genuine condition is "Like New" — then
+switching the filter to "Like New" correctly returned exactly that one
+listing and nothing else. Confirmed both entry points (the search-bar
+icon and `GenreChips`' icon) open the identical, now-working sheet.
+Confirmed the sheet is genuinely controlled — reopening it after
+applying "Good" showed "Good" still selected, not reset. Confirmed
+"Clear all" correctly resets the real applied filters (not just local
+UI state) back to the unfiltered set. Checked the corrected Condition/
+Language chip labels render correctly at 375px mobile width (the same
+pre-existing horizontally-scrollable `.chiprow` pattern already used
+elsewhere on this page, not a new issue).

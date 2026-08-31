@@ -17,7 +17,7 @@ export class DiscoveryService {
     this.prisma = prisma;
   }
 
-  async discover(viewer, { radiusKm = 0.5, genre, language, q, sort = 'newest', includeNearby = true } = {}) {
+  async discover(viewer, { radiusKm = 0.5, genre, language, condition, q, sort = 'newest', includeNearby = true } = {}) {
     if (!viewer.societyId) {
       return { listings: [], note: 'Join a society to see books nearby.' };
     }
@@ -42,13 +42,29 @@ export class DiscoveryService {
     const distanceBySociety = new Map(nearbySocieties.map((s) => [s.societyId, s.distanceMeters]));
     const receivedBookIds = [...new Set(received.map((e) => e.listing.bookId))];
 
+    // `genre` and `language` both narrow the related `book` row — merged into
+    // one filter object rather than two separate `book: {...}` spreads,
+    // which would silently clobber each other (object spread replaces the
+    // whole `book` key, it doesn't merge nested objects) the moment both are
+    // supplied at once, e.g. from the Search & Filters sheet (Task 67).
+    const bookFilter = {
+      ...(genre && genre !== 'All' ? { genre } : {}),
+      // Case-insensitive: real listings have both "English" and "en" as
+      // `languageCode`, and this at least tolerates a casing mismatch
+      // between however a value got stored and however it's searched for.
+      ...(language ? { languageCode: { equals: language, mode: 'insensitive' } } : {}),
+    };
+
     const where = {
       status: 'ACTIVE',
       societyId: { in: [...distanceBySociety.keys()] },
       ownerId: { not: viewer.id },
       ...(receivedBookIds.length ? { bookId: { notIn: receivedBookIds } } : {}),
-      ...(genre && genre !== 'All' ? { book: { genre } } : {}),
-      ...(language ? { book: { languageCode: language } } : {}),
+      ...(Object.keys(bookFilter).length ? { book: bookFilter } : {}),
+      // `condition` lives on the listing itself, not the book. Case-
+      // insensitive because real data has both "Good" and "GOOD" — an exact
+      // match would silently miss whichever casing the filter chip isn't.
+      ...(condition ? { condition: { equals: condition, mode: 'insensitive' } } : {}),
       ...(q?.trim()
         ? {
             OR: [

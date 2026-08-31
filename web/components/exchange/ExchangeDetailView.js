@@ -8,8 +8,10 @@ import NoteBox from '@/components/ui/NoteBox';
 import EmptyState from '@/components/ui/EmptyState';
 import ExchangeTimeline from './ExchangeTimeline';
 import ExchangePartnerCard from './ExchangePartnerCard';
+import CancelReasonForm from './CancelReasonForm';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useAppSheets } from '@/hooks/useAppSheets';
+import { useSheet } from '@/components/ui/SheetProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { useInterval } from '@/hooks/useInterval';
 import { useToast } from '@/components/ui/ToastProvider';
@@ -20,6 +22,7 @@ export default function ExchangeDetailView({ exchangeId }) {
   const showToast = useToast();
   const { getExchange, ensureExchange, refreshExchangeDetail, cancelExchange } = useAppData();
   const { reportUser } = useAppSheets();
+  const { openSheet, closeSheet } = useSheet();
   const { user } = useAuth();
 
   const exchange = getExchange(exchangeId);
@@ -78,9 +81,10 @@ export default function ExchangeDetailView({ exchangeId }) {
   const action = nextAction(exchange, user?.id);
   const closed = isTerminal(exchange.stage) || (exchange.stage === 'completed' && exchange.rated);
 
-  const onCancel = async () => {
+  const doCancel = async (reason) => {
     try {
-      await cancelExchange(exchange.id);
+      await cancelExchange(exchange.id, reason);
+      closeSheet();
       showToast(
         exchange.role === 'receiver'
           ? 'Exchange cancelled — your reserved credit was released'
@@ -90,6 +94,14 @@ export default function ExchangeDetailView({ exchangeId }) {
     } catch (err) {
       showToast(err.message || 'Could not cancel this exchange');
     }
+  };
+
+  // Task 61 — a reason is only required once the owner has accepted; a
+  // still-pending request needs no explanation, so that path keeps the
+  // original one-tap cancel with no prompt.
+  const onCancel = () => {
+    if (exchange.stage === 'requested') return doCancel();
+    openSheet('Cancel this exchange', <CancelReasonForm onSubmit={doCancel} />);
   };
 
   return (

@@ -79,6 +79,11 @@ export default function BookDetailView({ bookKey }) {
   }
 
   const mine = !!book.mine;
+  // A book already given away or received via a completed exchange is still
+  // "mine" for My Shelf's tab-grouping purposes, but there's nothing left to
+  // edit/pause/remove — the exchange is done. Only a still-active listing
+  // I actually own should get the owner-management controls.
+  const canManage = mine && book.status !== 'Given away' && book.status !== 'Received';
   const requested = requestedKeys.includes(bookKey);
 
   const onRequest = async () => {
@@ -247,7 +252,7 @@ export default function BookDetailView({ bookKey }) {
           )}
         </div>
 
-        {mine && (
+        {canManage && (
           <>
             <NoteBox icon="gift" style={{ margin: '12px 0 22px' }}>
               <b>How credits work</b>
@@ -290,40 +295,44 @@ export default function BookDetailView({ bookKey }) {
         )}
       </div>
 
-      <div className="sticky-cta">
-        {mine ? (
-          <>
-            <button className="btn btn-outline" onClick={() => router.push(`/books/add/details?edit=${bookKey}`)}>
-              <Icon name="edit" style={{ width: 15, height: 15 }} />Edit listing
-            </button>
-            <button className="btn btn-danger-solid" onClick={onRemove}>
-              <Icon name="x" style={{ width: 15, height: 15 }} />Remove listing
-            </button>
-          </>
-        ) : requested ? (
-          <>
-            {/* Message button on hold along with onMessage above — see the note there. */}
-            <button
-              className="btn btn-danger-solid"
-              onClick={async () => {
-                try {
-                  await cancelBookRequest(bookKey);
-                  showToast('Request cancelled — credit released back to your balance');
-                } catch (err) {
-                  showToast(err.message || 'Could not cancel this request');
-                }
-              }}
-            >
-              <Icon name="x" style={{ width: 15, height: 15 }} />Cancel Request
-            </button>
-          </>
-        ) : (
-          <>
-            {/* Message button on hold along with onMessage above — see the note there. */}
-            <button className="btn btn-primary" onClick={onRequest}>🤝 Request this book</button>
-          </>
-        )}
-      </div>
+      {/* No action bar at all for a book already given away or received —
+          the exchange is done, there's nothing left to manage or request. */}
+      {(canManage || !mine) && (
+        <div className="sticky-cta">
+          {canManage ? (
+            <>
+              <button className="btn btn-outline" onClick={() => router.push(`/books/add/details?edit=${bookKey}`)}>
+                <Icon name="edit" style={{ width: 15, height: 15 }} />Edit listing
+              </button>
+              <button className="btn btn-danger-solid" onClick={onRemove}>
+                <Icon name="x" style={{ width: 15, height: 15 }} />Remove listing
+              </button>
+            </>
+          ) : requested ? (
+            <>
+              {/* Message button on hold along with onMessage above — see the note there. */}
+              <button
+                className="btn btn-danger-solid"
+                onClick={async () => {
+                  try {
+                    await cancelBookRequest(bookKey);
+                    showToast('Request cancelled — credit released back to your balance');
+                  } catch (err) {
+                    showToast(err.message || 'Could not cancel this request');
+                  }
+                }}
+              >
+                <Icon name="x" style={{ width: 15, height: 15 }} />Cancel Request
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Message button on hold along with onMessage above — see the note there. */}
+              <button className="btn btn-primary" onClick={onRequest}>🤝 Request this book</button>
+            </>
+          )}
+        </div>
+      )}
     </>
   );
 }

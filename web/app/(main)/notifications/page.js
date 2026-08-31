@@ -9,7 +9,7 @@ import BottomNav from '@/components/layout/BottomNav';
 import EmptyState from '@/components/ui/EmptyState';
 import NoteBox, { SectionTitle } from '@/components/ui/NoteBox';
 import {
-  fetchNotifications, markAllRead, markRead, setPushPermission,
+  fetchNotifications, markRead, setPushPermission,
   deleteNotification, clearAllNotifications,
 } from '@/store/slices/notificationSlice';
 import { useToast } from '@/components/ui/ToastProvider';
@@ -53,18 +53,13 @@ export default function NotificationsPage() {
         subtitle={unread ? `${unread} unread` : 'You’re all caught up'}
         right={
           items.length ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                className="link-green"
-                style={{ fontSize: 12 }}
-                onClick={() => dispatch(clearAllNotifications())}
-              >
-                Clear all
-              </button>
-              <button className="circle-btn" onClick={() => dispatch(markAllRead())} aria-label="Mark all read">
-                <Icon name="check" />
-              </button>
-            </div>
+            <button
+              className="link-green"
+              style={{ fontSize: 12 }}
+              onClick={() => dispatch(clearAllNotifications())}
+            >
+              Clear all
+            </button>
           ) : null
         }
       />

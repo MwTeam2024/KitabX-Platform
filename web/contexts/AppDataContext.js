@@ -109,12 +109,26 @@ export function AppDataProvider({ children }) {
   const ensureBookDetail = useCallback(async (id) => {
     try {
       const detail = await listingsService.get(id);
-      mergeListings([detail]);
+      // The generic detail endpoint only knows "am I this listing's original
+      // owner" — it has no concept of "I received this via a completed
+      // exchange", so for a book `refreshMyBooks` already tagged Received/
+      // Given away, a naive overwrite would flip `mine`/`status` back to
+      // what a stranger sees (e.g. a completed listing reads as plain
+      // "Available" to a non-owner) — keep that framing, just enrich with
+      // the fuller fields (description, publisher, pageCount, ...).
+      setBooks((prev) => {
+        const existing = prev[id];
+        const preserveViewerContext = existing?.status === 'Received' || existing?.status === 'Given away';
+        const merged = preserveViewerContext
+          ? { ...detail, mine: existing.mine, status: existing.status, receivedAt: existing.receivedAt }
+          : detail;
+        return { ...prev, [id]: withCover(merged) };
+      });
       return detail;
     } catch {
       return null;
     }
-  }, [mergeListings]);
+  }, []);
 
   const refreshCredits = useCallback(async () => {
     const [balance, history] = await Promise.all([creditsService.balance(), creditsService.history()]);

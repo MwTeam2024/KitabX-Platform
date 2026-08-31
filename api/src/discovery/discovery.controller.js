@@ -19,6 +19,7 @@ export class DiscoveryController {
       radiusKm: query.radiusKm ? parseFloat(query.radiusKm) : undefined,
       genre: query.genre,
       language: query.language,
+      condition: query.condition,
       q: query.q,
       sort: query.sort,
       includeNearby: query.includeNearby !== 'false',

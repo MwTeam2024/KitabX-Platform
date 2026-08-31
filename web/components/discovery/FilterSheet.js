@@ -2,36 +2,41 @@
 
 import { useState } from 'react';
 import { useLocation } from '@/hooks/useLocation';
-import { GENRES, LANGUAGES } from '@/lib/mockData';
+import { GENRES, LANGUAGES, CONDITIONS } from '@/lib/mockData';
 
-const CONDITION_FILTERS = ['New', 'Like New', 'Good', 'Fair'];
+const CONDITION_LABELS = CONDITIONS.map((c) => c.label);
 
 /**
- * Multi-select genre/language/condition filters plus the radius stepper (§8).
- * The real filtering is a backend query; this only collects the criteria.
+ * Single-select genre/language/condition filters plus the radius stepper
+ * (§8). Task 67: this used to keep its own disconnected local state and a
+ * made-up `resultCount` estimate that never reflected a real query — the
+ * parent never even read the selections it emitted, so nothing here ever
+ * actually filtered anything. Now controlled by the parent's real
+ * genre/language/condition state (the same state `searchBooks` uses),
+ * single-select per group since that's what the backend filter — and the
+ * genre chips already on the page — actually support, and the condition
+ * options match real stored values (the old list included "New"/"Fair",
+ * neither of which any listing has ever actually been saved as).
  */
-export default function FilterSheet({ totalBooks = 24, onApply, onClose }) {
+export default function FilterSheet({ genre, language, condition, onApply, onClose }) {
   const { radiusKm, adjustRadius } = useLocation();
-  const [selected, setSelected] = useState({ genre: [], lang: [], cond: [] });
+  const [pending, setPending] = useState({
+    genre: genre && genre !== 'All' ? genre : null,
+    language: language || null,
+    condition: condition || null,
+  });
 
-  const toggle = (group, value) =>
-    setSelected((s) => ({
-      ...s,
-      [group]: s[group].includes(value) ? s[group].filter((v) => v !== value) : [...s[group], value],
-    }));
-
-  const activeCount = selected.genre.length + selected.lang.length + selected.cond.length;
-  const radiusSteps = Math.round((radiusKm - 0.5) / 0.5);
-  const resultCount = Math.max(2, totalBooks - activeCount * 4 - radiusSteps);
+  const pick = (group, value) =>
+    setPending((s) => ({ ...s, [group]: s[group] === value ? null : value }));
 
   const group = (key, options) => (
     <div className="chiprow" style={{ margin: 0 }}>
       {options.map((o) => (
         <button
           key={o}
-          className={`chip${selected[key].includes(o) ? ' on' : ''}`}
-          onClick={() => toggle(key, o)}
-          aria-pressed={selected[key].includes(o)}
+          className={`chip${pending[key] === o ? ' on' : ''}`}
+          onClick={() => pick(key, o)}
+          aria-pressed={pending[key] === o}
         >
           {o}
         </button>
@@ -42,8 +47,8 @@ export default function FilterSheet({ totalBooks = 24, onApply, onClose }) {
   return (
     <>
       <div className="field"><label>Genre</label>{group('genre', GENRES)}</div>
-      <div className="field"><label>Language</label>{group('lang', [...LANGUAGES, 'Marathi'])}</div>
-      <div className="field"><label>Condition</label>{group('cond', CONDITION_FILTERS)}</div>
+      <div className="field"><label>Language</label>{group('language', LANGUAGES)}</div>
+      <div className="field"><label>Condition</label>{group('condition', CONDITION_LABELS)}</div>
 
       <div className="filt-group">
         <span className="filt-group-h">Discovery radius</span>
@@ -57,18 +62,18 @@ export default function FilterSheet({ totalBooks = 24, onApply, onClose }) {
       <button
         className="link-green"
         style={{ marginBottom: 12 }}
-        onClick={() => setSelected({ genre: [], lang: [], cond: [] })}
+        onClick={() => setPending({ genre: null, language: null, condition: null })}
       >
         Clear all
       </button>
       <button
         className="btn btn-primary"
         onClick={() => {
-          onApply?.({ ...selected, resultCount });
+          onApply?.(pending);
           onClose?.();
         }}
       >
-        Show <span>{resultCount}</span> books
+        Apply filters
       </button>
     </>
   );
