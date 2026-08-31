@@ -50,7 +50,7 @@ export default function HomePage() {
     discoveryService.stats().then(setStats).catch(() => {});
   }, []);
 
-  const { books } = useBooks({ keys: discoveryKeys, query, genre, sort });
+  const { books } = useBooks({ keys: discoveryKeys, genre, sort });
   const sortLabel = SORT_OPTIONS.find((o) => o.key === sort)?.label ?? 'Newest';
 
   const openSort = () => {
@@ -87,7 +87,7 @@ export default function HomePage() {
           <Icon name="search" className="ic search-ic" />
           <input
             className="search-input"
-            placeholder="Search title, author, genre…"
+            placeholder="Search title, author, ISBN…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search books"

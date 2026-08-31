@@ -23,7 +23,7 @@ export default function BookDetailView({ bookKey }) {
   const router = useRouter();
   const showToast = useToast();
   const {
-    books, requestedKeys, getOwnerProfile,
+    books, requestedKeys, getOwnerProfile, ensureBookDetail,
     requestBook, cancelBookRequest, togglePauseListing, removeListing,
   } = useAppData();
   const { trustProfile, reportListing } = useAppSheets();
@@ -31,12 +31,38 @@ export default function BookDetailView({ bookKey }) {
   const book = books[bookKey];
   const [owner, setOwner] = useState(null);
 
+  // Whatever's cached for this key (from a discovery/my-books list) renders
+  // immediately, but is never the complete record — this always fetches the
+  // full detail on top of it. `checked` distinguishes "haven't heard back
+  // yet" from "confirmed gone", so a fresh page load with nothing cached yet
+  // doesn't flash the "no longer available" state before the fetch lands.
+  const [checked, setChecked] = useState(!!book);
+  useEffect(() => {
+    let alive = true;
+    setChecked(!!book);
+    ensureBookDetail(bookKey).finally(() => { if (alive) setChecked(true); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookKey]);
+
   useEffect(() => {
     if (!book?.ownerId) return;
     getOwnerProfile(book.ownerId).then(setOwner).catch(() => {});
   }, [book?.ownerId, getOwnerProfile]);
 
   if (!book) {
+    if (!checked) {
+      return (
+        <>
+          <ScreenHeader back backHref="/home" right={<HeaderActions compact />} />
+          <div className="app-scroll" style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <div className="bulk-spinner" />
+            </div>
+          </div>
+        </>
+      );
+    }
     return (
       <>
         <ScreenHeader back backHref="/home" right={<HeaderActions compact />} />
@@ -109,6 +135,9 @@ export default function BookDetailView({ bookKey }) {
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 27, fontWeight: 700, lineHeight: 1.12 }}>
               {book.title}
             </div>
+            {book.subtitle && (
+              <div style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 2 }}>{book.subtitle}</div>
+            )}
             <div style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 4 }}>{book.author}</div>
             {owner?.averageRating != null && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 10, flexWrap: 'wrap' }}>
@@ -127,15 +156,40 @@ export default function BookDetailView({ bookKey }) {
         <div className="section-row" style={{ padding: '0 0 10px' }}>
           <SectionTitle size={14}>Book details</SectionTitle>
         </div>
-        <div className="card" style={{ display: 'flex', padding: 0, overflow: 'hidden', marginBottom: 20 }}>
-          <MetaCell icon="tag" label="Condition" value={book.paused ? 'Paused' : book.cond} divider />
-          <MetaCell icon="globe" label="Language" value={book.lang || 'English'} />
-        </div>
+        <MetaGrid
+          fields={[
+            { icon: 'tag', label: 'Condition', value: book.paused ? 'Paused' : book.cond },
+            { icon: 'globe', label: 'Language', value: book.lang || 'English' },
+            book.publisher && { icon: 'building', label: 'Publisher', value: book.publisher },
+            book.pageCount && { icon: 'bookOpen', label: 'Pages', value: book.pageCount },
+          ].filter(Boolean)}
+        />
 
-        {(book.isbn || book.year) && (
-          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '-8px 0 20px' }}>
-            {[book.isbn && `ISBN: ${book.isbn}`, book.year && `Edition: ${book.year}`].filter(Boolean).join(' · ')}
+        {book.condDesc && (
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '-10px 0 20px', lineHeight: 1.5 }}>
+            {book.condDesc}
           </div>
+        )}
+
+        {(book.isbn || book.year || book.edition) && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '-8px 0 20px' }}>
+            {[
+              book.isbn && `ISBN: ${book.isbn}`,
+              book.year && `Published: ${book.year}`,
+              book.edition && `Edition: ${book.edition}`,
+            ].filter(Boolean).join(' · ')}
+          </div>
+        )}
+
+        {book.description && (
+          <>
+            <div className="section-row" style={{ padding: '0 0 10px' }}>
+              <SectionTitle size={14}>About this book</SectionTitle>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, margin: '0 0 20px' }}>
+              {book.description}
+            </div>
+          </>
         )}
 
         {book.pickup && (
@@ -333,14 +387,45 @@ function ConditionPhotoGallery({ book }) {
   );
 }
 
-function MetaCell({ icon, label, value, divider }) {
+/**
+ * Two-per-row grid of `MetaCell`s — however many `fields` are actually
+ * present (some, like publisher/page count, only exist for books looked up
+ * via Google Books). A right border separates the two cells in a row, a
+ * bottom border separates rows, and both are dropped exactly where there's
+ * no neighbouring cell for them to separate.
+ */
+function MetaGrid({ fields }) {
   return (
     <div
       style={{
-        flex: 1, padding: 14, display: 'flex', alignItems: 'center', gap: 10,
-        borderRight: divider ? '1px solid var(--line)' : undefined,
+        display: 'flex', flexWrap: 'wrap', padding: 0, overflow: 'hidden', marginBottom: 20,
       }}
+      className="card"
     >
+      {fields.map((f, i) => {
+        const isLastInRow = i % 2 === 1 || i === fields.length - 1;
+        const isLastRow = i >= fields.length - (fields.length % 2 === 0 ? 2 : 1);
+        return (
+          <MetaCell
+            key={f.label}
+            icon={f.icon}
+            label={f.label}
+            value={f.value}
+            style={{
+              flex: '1 1 50%', minWidth: '45%', boxSizing: 'border-box',
+              borderRight: isLastInRow ? undefined : '1px solid var(--line)',
+              borderBottom: isLastRow ? undefined : '1px solid var(--line)',
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function MetaCell({ icon, label, value, style }) {
+  return (
+    <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 10, ...style }}>
       <div className="stat-ic" style={{ margin: 0, width: 34, height: 34 }}>
         <Icon name={icon} style={{ width: 15, height: 15 }} />
       </div>

@@ -14,6 +14,12 @@ const SLOT_LABELS = ['Cover', 'Photo 2', 'Photo 3'];
  * everywhere in the app, per `BookCover.js`); slots 2-3 are condition photos
  * and unlock in order, so `photos[0]` is always the cover and removing a
  * photo shifts the rest up instead of leaving a hole.
+ *
+ * No `capture` attribute on the file inputs (Task 65 — same fix as
+ * bulk-upload's Task 56): `capture="environment"` makes mobile browsers
+ * launch the camera directly and skip the native gallery/file chooser
+ * entirely, so a plain input lets that native chooser offer both "Take
+ * Photo" and the photo library through one tap target instead.
  */
 export default function PhotoUploader({ photos = [], onChange }) {
   const inputRefs = useRef([]);
@@ -86,7 +92,6 @@ export default function PhotoUploader({ photos = [], onChange }) {
                 ref={(el) => { inputRefs.current[slot] = el; }}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 hidden
                 onChange={(e) => { handleFile(slot, e.target.files?.[0]); e.target.value = ''; }}
               />

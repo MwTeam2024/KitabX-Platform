@@ -1861,18 +1861,43 @@ the lock/info icon next to the address bar, allow Camera, then try
 again — also check your phone's system settings..."), and confirmed it
 renders cleanly (readable, no overflow) at 375px mobile width too.
 
-**Left open (not marked ✅ yet):** this fixes the diagnosability and one known
-constraint edge case, but the exact reason the *user's specific* Android
-Chrome + production HTTPS combination fails couldn't be reproduced here
-directly — no real Android hardware/camera available in this
-environment. Asked the user to retest the real scan flow on their phone
-against the deployed site; the new banner will now show the specific
-real reason (most likely a per-site or OS-level camera permission that
-got denied at some point and needs re-enabling, based on process of
-elimination against the ruled-out causes above) instead of a generic
-message, which should make the next step obvious either way. Will close
-this out once confirmed, or dig further with that specific error text in
-hand if it's still unclear.
+**Update after user retest:** camera now opens correctly on the phone
+(the permission-diagnostics fix above did its job — the camera-access
+blocker is resolved), but the barcode itself never gets recognized/
+decoded once the live feed is showing. A new, distinct bug from the
+original "won't open" report.
+
+**Investigation.** `lib/barcode.js` constructed `new
+BrowserMultiFormatReader()` with **no hints at all**. Read `@zxing/library`'s
+`MultiFormatReader.setHints` directly: with no `POSSIBLE_FORMATS` hint, it
+falls back to trying *every* supported format on every single frame —
+QR/DataMatrix/Aztec/PDF417/MaxiCode as well as the 1D reader ISBNs
+actually need (EAN-13, always, since every ISBN-13 barcode is EAN-13
+encoded) — and `TRY_HARDER` defaults to off. `TRY_HARDER` is ZXing's more
+thorough (slower) decode pass that real-world conditions (a curved book
+cover, a slight angle, uneven lighting) generally need — without it,
+ZXing gives up on a frame quickly rather than working harder to extract
+a barcode from an imperfect capture. Running 5 irrelevant 2D decoders
+against every frame while never invoking the thorough pass for the one
+format that actually matters is a very plausible explanation for
+"camera works, barcode never registers."
+
+**Fix**: `lib/barcode.js` now constructs `BrowserMultiFormatReader` with
+explicit hints — `POSSIBLE_FORMATS: [EAN_13, EAN_8, UPC_A, UPC_E]` (skips
+the irrelevant 2D formats entirely, so every frame's compute budget goes
+toward the format that matters) and `TRY_HARDER: true`.
+
+**Verified only as far as this environment allows**: confirmed locally
+that the new `BrowserMultiFormatReader(HINTS)` construction doesn't throw
+and the existing error-banner flow still works correctly end-to-end
+(same "camera permission is blocked" banner as before, proving the hints
+object didn't break initialization). **Cannot verify the actual "does a
+real barcode now decode successfully" outcome from here** — no physical
+camera or printed barcode available in this environment, same limitation
+as the original camera-access bug. This is a solid, well-understood fix
+based on ZXing's own documented defaults, not a guess, but it still
+needs a real retest on the phone to confirm it actually resolves the
+scan-never-registers symptom.
 
 ## Task 55 — "Search by title and author" is non-functional ✅
 Confirmed with the user this meant the "Add a book" flow's step 2 option
@@ -2102,14 +2127,132 @@ custom time slot and pickup point (proving the custom-value-on-mount
 detection works, not just the fresh-selection path). Confirmed the whole
 form renders cleanly at 375px mobile width with no overflow.
 
-## Task 59 — Home page filters/search broken; add ISBN search ⬜
-All the filter and search functionality on the home page is currently not
-working correctly. Also add "search by ISBN code" as a new option in the
-search section.
+## Task 59 — Home page filters/search broken; add ISBN search ✅
+All the filter and search functionality on the home page needed to work
+correctly, plus add "search by ISBN code" to the search section.
 
-## Task 60 — Book detail page shows only partial book data ⬜
-Clicking into a particular book's detail page only shows a subset of
+**Investigation.** A parallel exploration during Task 55 had already
+traced the backend discovery search (`discovery.service.js`) and found it
+correct — including that its Prisma `OR` filter already matched
+`isbn13`/`isbn10`, not just title/author — verified directly against the
+real DB. That made "add ISBN search" look almost done already, so this
+session started by testing it live rather than assuming: searched a real,
+verified, in-scope ISBN (`9789357287586`, an active "Oswaal 24 JEE
+Main..." listing, confirmed via a direct Prisma query against the shared
+DB) on the real production site — **zero results**, despite the exact
+same title being findable by name seconds earlier.
+
+Isolated it precisely rather than guessing:
+- Curled the live Render API directly with a real session cookie for the
+  ISBN query — **it returned the correct match.** The backend was right
+  all along; the bug was purely client-side.
+- That pointed straight at `hooks/useBooks.js`, which — despite its own
+  doc comment saying it "only searches/sorts the page of listings the API
+  would have already returned" — was independently re-filtering the
+  server's (already correct) results with its own separate 200ms-debounced
+  copy of the query, checking `` `${title} ${author}` `` only. Since the
+  listing objects returned by discovery don't even carry an ISBN field,
+  this second filter silently discarded every listing the server had
+  legitimately matched by ISBN — a real, confirmed bug, not a hypothesis
+  (this exact code path was flagged as suspicious-but-unconfirmed during
+  Task 55; today's live test is what confirmed it).
+- Confirmed `useBooks` has exactly one caller (`home/page.js`) before
+  touching it, so no other screen could be affected.
+
+**Fix**: `hooks/useBooks.js` — removed the redundant text-search filter
+(and its own separate debounce) entirely; the hook now only sorts what
+the server already returned, matching what its own comment always said
+it should do. `home/page.js` — dropped the now-unused `query` param from
+the `useBooks` call, and changed the search placeholder from "Search
+title, author, genre…" to "Search title, author, ISBN…" so the
+already-working (once unblocked) ISBN search is actually discoverable.
+
+**Verified live** end-to-end on local dev against the same shared DB used
+above: searching the exact ISBN now correctly surfaces "Oswaal 24 JEE
+Main..."; re-tested title search ("Physical" → Physical Education) as a
+regression check — still correct; tested the Non-fiction genre chip
+(legitimately zero results at this radius — confirmed via the network
+request that `genre=Non-fiction` was sent and the empty result is real,
+not a bug); reset to "All" and confirmed all 14 books list correctly
+with full data; opened the Sort sheet and confirmed it presents all
+three options correctly. Confirmed the updated search bar renders
+cleanly at 375px mobile width.
+
+## Task 60 — Book detail page shows only partial book data ✅
+Clicking into a particular book's detail page only showed a subset of
 fields — user wants the complete book detail data shown there.
+
+**Investigation.** Found a two-layer gap, both real:
+- `BookDetailView.js` reads `book` purely from `AppDataContext`'s
+  in-memory `books` map — it never called the dedicated
+  `GET /listings/:id` detail endpoint at all, despite that endpoint
+  (`listings.service.js#getListing` → `_toDto`) and its frontend wrapper
+  (`listingsService.get`) already existing and being noticeably richer
+  than discovery's card DTO. A repo-wide grep confirmed `listingsService.get`
+  had zero callers — genuinely dead code. So the detail page was always
+  stuck with whichever skinny/medium DTO happened to already be cached
+  from wherever the viewer navigated from (discovery's `_toCardDto` is the
+  thinnest; my-books/received's `_toDto` is richer but still incomplete).
+- Even the richer `_toDto` itself was missing real `Book` schema fields
+  that were already being fetched from Postgres (`include: { book: true }`
+  pulls every column) but never mapped into the DTO: `publisher`,
+  `description`, `pageCount`, `edition` — confirmed by reading
+  `schema.prisma`'s `Book` model directly against `_toDto`'s return object.
+- A smaller labeling bug in the same area: the one identifier line that
+  did exist showed `Edition: {book.year}` — `year` is actually
+  `publicationYear`, not the separate (and always-empty-in-`_toDto`,
+  until now) `edition` field, so this label was simply wrong regardless
+  of the missing-fields issue.
+
+**Fix:**
+- `apps/api/src/listings/listings.service.js#_toDto` — added `edition`,
+  `publisher`, `description`, `pageCount` to the returned object; no
+  Prisma query changes needed, the data was already being fetched.
+- `apps/web/contexts/AppDataContext.js` — new `ensureBookDetail(id)`,
+  finally putting the dead `listingsService.get` to use: fetches the full
+  detail DTO and merges it over whatever's cached (`mergeListings`
+  already replaces-by-key), swallowing errors so a removed/missing
+  listing falls back cleanly instead of throwing.
+- `BookDetailView.js` — calls `ensureBookDetail(bookKey)` on mount, every
+  time, regardless of what's already cached, so the page always ends up
+  with the complete record. Added a `checked` guard (same pattern as
+  `PickupScheduler.js`'s exchange-detail fetch) so a fresh direct-link
+  page load — nothing cached yet — shows a loading spinner instead of
+  incorrectly flashing "no longer available" before the fetch lands.
+  Now renders: `subtitle` (under the title), a `MetaGrid` that flexibly
+  wraps in however many fact cells are actually present (Condition,
+  Language, plus Publisher/Pages only when non-null, correct dividers on
+  every side including between wrapped rows), `condDesc` (the owner's own
+  condition note, previously fetched but never rendered), a corrected
+  identifier line (`ISBN: … · Published: … · Edition: …`, each field only
+  shown when present, no more `year` mislabeled as edition), and a new
+  "About this book" section for `description` when the record has one.
+
+**Verified live end-to-end**, including a genuine cold-cache case: found
+a real listing (Atomic Habits) in the shared DB whose `Book` row actually
+has `description`/`pageCount` populated (confirmed via direct query
+first, to know what a positive case should show), navigated to it by
+listing id directly (a fresh page load with nothing pre-cached — exactly
+the scenario the dead detail-endpoint bug would have hit hardest) and
+confirmed the full real page: Pages (320), the condition note ("Book is
+in good condition"), a correct "ISBN: … · Published: 2018" line, and a
+real "About this book" paragraph rendered from Google Books' description
+text — all fields that were previously invisible on this exact screen.
+Cross-checked a book whose record genuinely has no publisher/description/
+pageCount (Sapiens [Tenth Anniversary Edition]) and confirmed those
+sections are correctly omitted rather than showing blank/undefined.
+Confirmed the pre-existing "this listing is no longer available" path
+still works correctly for a genuinely invalid id (regression check on the
+new `checked` state logic). Confirmed the whole page, including the new
+wrapped `MetaGrid`, renders cleanly at 375px mobile width.
+
+Noted but not investigated further (looked like test-data noise, not an
+app bug): the user's own screenshot and one test listing here both show a
+condition photo that doesn't match the listed book (e.g. Atomic Habits
+showing a "milk and honey" cover) — since condition photos are whatever
+the individual lending member actually uploaded of their own physical
+copy, a mismatch is a data-entry issue for that one test listing, not
+something the code got wrong.
 
 ## Task 61 — Book cancellation reason for both owner and buyer, surfaced in notifications ⬜
 A cancellation reason must be captured from whichever side cancels
@@ -2126,10 +2269,98 @@ checkmark icon sitting to the right of "Clear all".
 User attached a screenshot of a book detail page — remove the heart/
 wishlist icon shown top-right of that page.
 
-## Task 64 — "Not signed in" error when listing a book manually right after OTP signup ⬜
+## Task 64 — "Not signed in" error when listing a book manually right after OTP signup ⬜ (code fix shipped, needs a Vercel dashboard env-var change to activate)
 User reported: signed up using the OTP shown on screen (dev OTP), then
-tried to list a book manually, and got a "not signed in" error even
-though signup/OTP verification had just succeeded. Needs investigation
-into whether the auth token/session isn't actually being persisted (or
-isn't ready yet) right after the signup OTP-verify step, surfaced by the
-manual list-book flow specifically.
+tried to list a book manually on their phone, and got a "not signed in"
+error even though signup/OTP verification had just succeeded.
+
+**Investigation.** Ruled out several plausible causes with real evidence
+before settling on the actual one:
+- Not a frontend race — `OtpVerifyForm.js` awaits the verify request and
+  only navigates after it resolves; no premature redirect.
+- Not the `JwtAuthGuard` throwing on stale client state — confirmed via
+  code that "Not signed in" is a real backend 401
+  (`apps/api/src/common/guards/jwt-auth.guard.js`) thrown when
+  `req.cookies[SESSION_COOKIE_NAME]` is genuinely missing from the
+  request — not a frontend-only illusion.
+- An initial hypothesis (session cookie getting `secure:false,
+  sameSite:'lax'` because dev-OTP visibility implied `NODE_ENV !==
+  'production'`) turned out to be **wrong on direct inspection** — curled
+  the real production OTP-verify endpoint directly and confirmed the
+  actual `Set-Cookie` header already has the correct
+  `HttpOnly; Secure; SameSite=None`. Also reproduced a full sign-up on
+  the live site and confirmed a same-browser follow-up cross-origin call
+  to `/auth/me` succeeded — so the cookie *is* being set and sent
+  correctly in a Chromium-based browser.
+- **Real root cause**: the frontend (Vercel) and API (Render) are on two
+  entirely different domains, which makes the session cookie a
+  third-party cookie from the browser's perspective — and **iOS Safari
+  blocks third-party cookies by default** ("Prevent Cross-Site
+  Tracking", on for every iPhone out of the box), regardless of correct
+  `Secure`/`SameSite=None` flags. This is a known, common failure mode
+  for exactly this frontend/backend-on-different-domains architecture,
+  and explains "works right after signing in on desktop, fails
+  specifically on an iPhone" precisely. Confirmed with the user this was
+  tested on a mobile phone.
+- Asked the user how to fix it given this is an architectural choice, not
+  a one-line patch — they chose the Vercel proxy/rewrite approach over
+  switching to bearer-token auth.
+
+**Fix**: `apps/web/next.config.mjs` now proxies `/api/v1/*` through the
+same Vercel domain via `rewrites()`, forwarding to `BACKEND_API_URL`
+server-side — so the browser only ever talks to its own origin for API
+calls, eliminating the third-party-cookie problem entirely with no
+changes needed anywhere else in the app. Guarded behind `BACKEND_API_URL`
+being set at all, so local dev (where frontend and API are same-site
+`localhost` ports and already work fine) is completely unaffected —
+verified live, local dev still works exactly as before after this change.
+`apps/web/.env.example` documents the new `BACKEND_API_URL` var and that
+`NEXT_PUBLIC_API_URL` must become the *relative* path `/api/v1` in
+production specifically (not touched locally). Checked every usage of
+`NEXT_PUBLIC_API_URL` in the codebase (`lib/api-client.js` is the only
+functional one) — a relative base URL works fine there since `fetch()`
+resolves relative paths against the current page's own origin.
+
+**Deliberately left as a separate follow-up, not fixed here**: the
+Socket.IO notification gateway (`NEXT_PUBLIC_SOCKET_URL`) still connects
+directly cross-origin to Render, unproxied — WebSocket rewrite support
+through Vercel is less proven/reliable than plain HTTP, and this wasn't
+the reported symptom (chat itself is already switched off per an earlier
+task; only real-time notification push is at stake, which has a working
+non-realtime fallback per its own code comments). If the same
+third-party-cookie issue turns out to affect socket auth on iOS too,
+that's follow-up work, not bundled into this fix.
+
+**Still needs a manual step from the user** (Vercel dashboard access,
+not something I can do): set `BACKEND_API_URL=https://kitabx-platform.onrender.com`
+(no `/api/v1` suffix) and change the existing `NEXT_PUBLIC_API_URL` to
+the literal relative value `/api/v1` in the Vercel project's production
+environment variables, then redeploy. Until that's done, production
+keeps working exactly as it does today (calling Render directly) since
+the rewrite is a no-op without `BACKEND_API_URL` — this change is inert
+until that env var is set.
+
+## Task 65 — Manual "Enter details" photo slots force camera-only, same as bulk upload did ✅
+The manual add-a-book flow's 3 photo slots (Cover/Photo 2/Photo 3) needed
+the same "Take Photo or Choose from Gallery" native-chooser fix already
+applied to bulk-upload-with-AI in Task 56.
+
+**Investigation.** `components/books/PhotoUploader.js` doesn't reuse the
+shared `UploadBox` component at all — it's a separate, standalone
+3-slot grid with its own hidden `<input type="file">` per slot, each
+hardcoded with `capture="environment"` — the exact same bug as Task 56,
+just in a second, independent component.
+
+**Fix**: removed `capture="environment"` from all three inputs, same
+reasoning as Task 56 — the plain input hands control to the phone's
+native chooser, which offers both "Take Photo" and the gallery through
+one tap target, instead of the app forcing the camera open directly and
+hiding the gallery option.
+
+**Verified live end-to-end**: confirmed all three inputs now have no
+`capture` attribute, then dispatched a real synthesized file into the
+Cover slot via a `DataTransfer`-backed `change` event — confirmed it
+correctly uploaded to `POST /uploads/listing-photo` (201 Created) and
+the UI updated to "1/3 photos added" with the cover slot showing the
+uploaded image, proving the fix didn't disturb the working upload
+pipeline.

@@ -1,5 +1,18 @@
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import { NotFoundException } from '@zxing/library';
+import { NotFoundException, DecodeHintType, BarcodeFormat } from '@zxing/library';
+
+// ISBN barcodes are always EAN-13 (UPC-A/EAN-8 covers older/regional
+// variants); with no hints at all ZXing also tries QR/DataMatrix/Aztec/
+// PDF417/MaxiCode on every single frame, which both wastes time it could
+// spend re-trying the 1D decode and skips TRY_HARDER (off by default) —
+// the more thorough pass that real-world scans (a curved cover, an angle,
+// imperfect lighting) usually need. This was the actual cause of "camera
+// opens but never reads the barcode": not a permissions problem, a
+// decode-quality one.
+const HINTS = new Map([
+  [DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E]],
+  [DecodeHintType.TRY_HARDER, true],
+]);
 
 /**
  * Starts the device camera in `videoEl` and decodes barcodes continuously
@@ -8,7 +21,7 @@ import { NotFoundException } from '@zxing/library';
  * the normal "still looking" case, not a real error, so it's swallowed here.
  */
 export function startScan(videoEl, onResult, onError) {
-  const reader = new BrowserMultiFormatReader();
+  const reader = new BrowserMultiFormatReader(HINTS);
   let controls = null;
   let stopped = false;
 

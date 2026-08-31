@@ -98,6 +98,24 @@ export function AppDataProvider({ children }) {
     return listings;
   }, [mergeListings]);
 
+  // Task 60 — the book detail page previously only ever had whatever DTO
+  // happened to already be cached (discovery's skinny card DTO, or my-books'
+  // richer-but-still-partial one), and never called the dedicated detail
+  // endpoint at all. This always fetches the full record and merges it over
+  // whatever's cached, so the detail page shows complete data regardless of
+  // which list the viewer arrived from. Swallows errors (a removed/missing
+  // listing) so the page can fall back to its own "no longer available"
+  // state instead of crashing.
+  const ensureBookDetail = useCallback(async (id) => {
+    try {
+      const detail = await listingsService.get(id);
+      mergeListings([detail]);
+      return detail;
+    } catch {
+      return null;
+    }
+  }, [mergeListings]);
+
   const refreshCredits = useCallback(async () => {
     const [balance, history] = await Promise.all([creditsService.balance(), creditsService.history()]);
     setCredits(balance);
@@ -436,7 +454,7 @@ export function AppDataProvider({ children }) {
       exchanges: adminExchanges, creditsLedger: adminCreditsLedger, reports: adminReports,
       settings: adminSettings, dashboard: adminDashboard,
     },
-    refreshBooks, refreshMyBooks, searchBooks, refreshCredits, deleteCreditTransaction, clearCreditHistory,
+    refreshBooks, refreshMyBooks, searchBooks, ensureBookDetail, refreshCredits, deleteCreditTransaction, clearCreditHistory,
     isWishlisted, toggleWishlist, refreshWishlist,
     requestBook, cancelBookRequest,
     publishBook: async (payload) => {
@@ -475,7 +493,7 @@ export function AppDataProvider({ children }) {
   }), [
     books, discoveryKeys, wishlist, credits, creditHistory, exchanges, chatThreads, requestedKeys,
     adminUsers, adminDeletionRequests, adminSocieties, adminLocationRequests, adminFlaggedListings, adminFlaggedUsers, adminExchanges, adminCreditsLedger, adminReports, adminSettings, adminDashboard,
-    refreshBooks, refreshMyBooks, searchBooks, refreshCredits, deleteCreditTransaction, clearCreditHistory,
+    refreshBooks, refreshMyBooks, searchBooks, ensureBookDetail, refreshCredits, deleteCreditTransaction, clearCreditHistory,
     isWishlisted, toggleWishlist, refreshWishlist,
     requestBook, cancelBookRequest, getExchange, ensureExchange, refreshExchanges, refreshExchangeDetail,
     acceptExchange, declineExchange, cancelExchange, proposePickup, confirmPickup,
