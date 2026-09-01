@@ -189,9 +189,29 @@ export class ListingsService {
     if (!['ACTIVE', 'PAUSED'].includes(listing.status)) {
       throw new BadRequestException(`Cannot pause a listing that is ${listing.status.toLowerCase()}`);
     }
-    await this.prisma.bookListing.update({
-      where: { id },
-      data: { status: paused ? 'PAUSED' : 'ACTIVE', pausedAt: paused ? new Date() : null },
+    // Same wishlist alert as a brand-new listing (createListing above) — a
+    // reactivated listing is just as "now available" to someone who wishlisted
+    // it while it sat paused. Only fires on the actual PAUSED -> ACTIVE edge,
+    // not on a same-state no-op call.
+    const isReactivating = !paused && listing.status === 'PAUSED';
+    await this.prisma.$transaction(async (tx) => {
+      await tx.bookListing.update({
+        where: { id },
+        data: { status: paused ? 'PAUSED' : 'ACTIVE', pausedAt: paused ? new Date() : null },
+      });
+      if (isReactivating) {
+        const wishlisters = await tx.wishlist.findMany({ where: { bookId: listing.bookId, userId: { not: ownerId } } });
+        for (const w of wishlisters) {
+          await this.notifications.create(tx, {
+            userId: w.userId,
+            type: 'WISHLIST',
+            title: 'A wishlisted book is now available!',
+            body: `"${listing.book.title}" is available again — request it before someone else does.`,
+            entityType: 'listing',
+            entityId: id,
+          });
+        }
+      }
     });
     return this.getListing(id, { viewerId: ownerId });
   }
