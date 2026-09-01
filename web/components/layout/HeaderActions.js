@@ -45,8 +45,13 @@ export default function HeaderActions({ avatarHref = '/profile', compact = false
         {/* A number only when something is actually unread — no idle dot. */}
         {unread > 0 && <span className="hdr-count">{unread > 9 ? '9+' : unread}</span>}
       </button>
-      <Link href={avatarHref} className="avatar-chip">
-        {user?.initials || 'PS'}
+      <Link href={avatarHref} className="avatar-chip" style={{ overflow: 'hidden', padding: 0 }}>
+        {user?.profileImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={user.profileImageUrl} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          user?.initials || 'PS'
+        )}
       </Link>
     </div>
   );

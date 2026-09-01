@@ -79,8 +79,18 @@ export default function ProfilePage() {
           </div>
 
           <div className="profile-id-row">
-            <button className="profile-avatar" onClick={() => router.push('/profile/settings')} style={{ padding: 0 }}>
-              {user.initials}
+            <button
+              className="profile-avatar"
+              onClick={() => router.push('/profile/settings')}
+              style={{ padding: 0, overflow: 'hidden' }}
+              aria-label="Open profile settings"
+            >
+              {user.profileImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.profileImageUrl} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                user.initials
+              )}
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
               <h2>{user.name}</h2>
@@ -145,6 +155,13 @@ export default function ProfilePage() {
             <Icon name="bell" />
           </div>
           <span className="mt">Notification preferences</span>
+          <Icon name="chevronRight" className="ic arrow" />
+        </button>
+        <button className="menu-row" onClick={() => router.push('/profile/settings')}>
+          <div className="menu-ic round" style={{ background: 'var(--purple-soft)', color: 'var(--purple)' }}>
+            <Icon name="settings" />
+          </div>
+          <span className="mt">Settings</span>
           <Icon name="chevronRight" className="ic arrow" />
         </button>
 
