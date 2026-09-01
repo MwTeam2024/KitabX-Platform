@@ -15,6 +15,7 @@ function toItem(n) {
     id: n.id,
     emoji: TYPE_EMOJI[n.type] || '🔔',
     title: n.title,
+    body: n.body,
     time: n.createdAt,
     href: toDeepLink(n),
     gold: n.type === 'WISHLIST',
