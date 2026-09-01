@@ -15,6 +15,24 @@ const HINTS = new Map([
 ]);
 
 /**
+ * ISBN barcodes are Bookland EAN-13: a 978/979 prefix plus a real EAN-13
+ * check digit. A misread frame (motion blur, glare, a curved cover) often
+ * still decodes to *some* 13-digit string, and the scanner's EAN_8/UPC_A/
+ * UPC_E fallback formats above can also lock onto an unrelated barcode
+ * (a price sticker) — this is what actually tells "camera read this wrong"
+ * apart from "this ISBN genuinely isn't in the book database", instead of
+ * sending every decode straight to the lookup API and calling whatever
+ * comes back a real miss.
+ */
+export function isValidIsbnBarcode(text) {
+  const digits = (text || '').replace(/\D/g, '');
+  if (digits.length !== 13 || !/^97[89]/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i += 1) sum += Number(digits[i]) * (i % 2 === 0 ? 1 : 3);
+  return (10 - (sum % 10)) % 10 === Number(digits[12]);
+}
+
+/**
  * Starts the device camera in `videoEl` and decodes barcodes continuously
  * (ZXing scans every video frame) until the first hit or `stop()` is called.
  * `NotFoundException` fires on every frame with no barcode in view — that's

@@ -8,7 +8,7 @@ import { BookCover } from '@/components/books/BookCover';
 import EmptyState from '@/components/ui/EmptyState';
 import { coverForDraft, useBookDraft } from '@/contexts/BookDraftContext';
 import { booksService } from '@/services/books.service';
-import { startScan as startCameraScan } from '@/lib/barcode';
+import { startScan as startCameraScan, isValidIsbnBarcode } from '@/lib/barcode';
 import { useToast } from '@/components/ui/ToastProvider';
 
 /**
@@ -44,25 +44,39 @@ export default function ScanIsbnPage() {
   const router = useRouter();
   const showToast = useToast();
   const { patchDraft } = useBookDraft();
-  const [state, setState] = useState('idle'); // idle | scanning | looking-up | match | notfound
+  const [state, setState] = useState('idle'); // idle | scanning | looking-up | match | notfound | lookup-error
   const [match, setMatch] = useState(null);
   const [cameraError, setCameraError] = useState(null);
+  const [scanNonce, setScanNonce] = useState(0);
   const videoRef = useRef(null);
   const stopScanRef = useRef(null);
 
   useEffect(() => () => stopScanRef.current?.(), []);
 
   const lookupIsbn = async (rawText) => {
+    const isbn = rawText.replace(/[^0-9Xx]/g, '');
+    if (!isValidIsbnBarcode(isbn)) {
+      // A misread frame or a non-ISBN barcode (e.g. a price sticker) the
+      // scanner locked onto — the lookup API was never going to find this,
+      // so just restart the camera instead of reporting a false "no match".
+      // `startScan` already stopped itself on this decode; bumping the nonce
+      // re-runs the effect below on the same <video> element to restart it.
+      showToast("That didn't look like a valid ISBN barcode — try again");
+      setScanNonce((n) => n + 1);
+      return;
+    }
     stopScanRef.current?.();
     setState('looking-up');
-    const isbn = rawText.replace(/[^0-9Xx]/g, '');
     try {
       const result = await booksService.lookupByIsbn(isbn);
       if (!result) return setState('notfound');
       setMatch(result);
       setState('match');
-    } catch {
-      setState('notfound');
+    } catch (err) {
+      // A 404 means the lookup genuinely found nothing; anything else (rate
+      // limited, the lookup service down, an expired session) is a transient
+      // failure that deserves a retry, not "this book doesn't exist".
+      setState(err?.status === 404 ? 'notfound' : 'lookup-error');
     }
   };
 
@@ -85,7 +99,7 @@ export default function ScanIsbnPage() {
     );
     return () => stopScanRef.current?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  }, [state, scanNonce]);
 
   const useMatch = () => {
     patchDraft({
@@ -199,6 +213,24 @@ export default function ScanIsbnPage() {
               <button className="btn btn-primary" onClick={() => router.push('/books/add/details')}>
                 Enter details manually
               </button>
+            }
+          />
+        )}
+
+        {state === 'lookup-error' && (
+          <EmptyState
+            icon="⚠️"
+            title="Couldn't check that ISBN right now."
+            hint="The book lookup service is temporarily busy — try scanning again in a moment, or enter the details yourself."
+            action={
+              <>
+                <button className="btn btn-primary" style={{ marginBottom: 10 }} onClick={startScan}>
+                  Try again
+                </button>
+                <button className="btn btn-outline" onClick={() => router.push('/books/add/details')}>
+                  Enter details manually
+                </button>
+              </>
             }
           />
         )}
