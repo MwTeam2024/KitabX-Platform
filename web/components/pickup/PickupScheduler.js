@@ -148,6 +148,7 @@ export default function PickupScheduler({ exchangeId }) {
   const openCancelSheet = () => {
     openSheet('Cancel this exchange', (
       <CancelReasonForm
+        role={exchange.role}
         onSubmit={async (reason) => {
           try {
             await cancelExchange(exchange.id, reason);

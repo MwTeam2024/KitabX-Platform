@@ -55,6 +55,11 @@ export default function NotifDropdown() {
             <span className="nem">{n.emoji}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <b>{n.title}</b>
+              {n.body && (
+                <div style={{ fontSize: 12, color: 'var(--text)', margin: '2px 0 3px', lineHeight: 1.4 }}>
+                  {n.body}
+                </div>
+              )}
               <span>{timeAgo(n.time)} · Tap to view ›</span>
             </div>
             <button

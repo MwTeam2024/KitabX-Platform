@@ -101,7 +101,7 @@ export default function ExchangeDetailView({ exchangeId }) {
   // original one-tap cancel with no prompt.
   const onCancel = () => {
     if (exchange.stage === 'requested') return doCancel();
-    openSheet('Cancel this exchange', <CancelReasonForm onSubmit={doCancel} />);
+    openSheet('Cancel this exchange', <CancelReasonForm role={exchange.role} onSubmit={doCancel} />);
   };
 
   return (
