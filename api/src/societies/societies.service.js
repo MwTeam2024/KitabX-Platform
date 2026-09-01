@@ -1,7 +1,10 @@
 import { Dependencies, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../common/redis/redis.service';
 
 const DEFAULT_PICKUP_POINTS = ['Security Gate', 'Reception', 'Clubhouse', 'Common Area'];
+const SOCIETIES_CACHE_KEY = 'societies:list';
+const SOCIETIES_CACHE_TTL_SECONDS = 60;
 
 /**
  * City → Area → Society → Block/PickupPoint reference data (§8, Module 1/8
@@ -9,11 +12,12 @@ const DEFAULT_PICKUP_POINTS = ['Security Gate', 'Reception', 'Clubhouse', 'Commo
  * column Prisma Client can't write directly — see discovery.service.js) in
  * sync with the plain lat/lng columns whenever they change.
  */
-@Dependencies(PrismaService)
+@Dependencies(PrismaService, RedisService)
 @Injectable()
 export class SocietiesService {
-  constructor(prisma) {
+  constructor(prisma, redis) {
     this.prisma = prisma;
+    this.redis = redis;
   }
 
   listCities() {
@@ -24,14 +28,24 @@ export class SocietiesService {
     return this.prisma.area.findMany({ where: { cityId, isActive: true }, orderBy: { name: 'asc' } });
   }
 
-  /** Flat, frontend-friendly list — every active society with its city baked into the label. */
+  /**
+   * Flat, frontend-friendly list — every active society with its city baked
+   * into the label. Loaded on every signup/city-select screen but changes
+   * rarely (a new society, or its member/listing counts drifting), so a
+   * short cache avoids re-querying on every keystroke of the city filter.
+   */
   async listSocieties() {
+    const cached = await this.redis.get(SOCIETIES_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+
     const societies = await this.prisma.society.findMany({
       where: { isActive: true },
       include: { area: { include: { city: true } }, _count: { select: { users: true, listings: true } } },
       orderBy: { name: 'asc' },
     });
-    return societies.map((s) => this._toDto(s));
+    const dtos = societies.map((s) => this._toDto(s));
+    await this.redis.set(SOCIETIES_CACHE_KEY, JSON.stringify(dtos), SOCIETIES_CACHE_TTL_SECONDS);
+    return dtos;
   }
 
   async getSociety(id) {
@@ -46,6 +60,14 @@ export class SocietiesService {
     });
     if (!society) throw new NotFoundException('Society not found');
     return this._toDto(society, { withBlocks: true, withPickupPoints: true });
+  }
+
+  /** Any write outside this service that flips a Society's cached fields
+   * (e.g. admin.service.js's removeSociety toggling isActive) must call this
+   * or listSocieties() will keep serving the pre-write snapshot until the
+   * TTL expires. */
+  invalidateCache() {
+    return this.redis.del(SOCIETIES_CACHE_KEY);
   }
 
   listBlocks(societyId) {
@@ -76,6 +98,7 @@ export class SocietiesService {
     });
     if (latitude != null && longitude != null) await this._syncLocation(society.id, latitude, longitude);
 
+    await this.redis.del(SOCIETIES_CACHE_KEY);
     return this.getSociety(society.id);
   }
 
@@ -96,6 +119,7 @@ export class SocietiesService {
     if (updates.latitude != null && updates.longitude != null) {
       await this._syncLocation(id, updates.latitude, updates.longitude);
     }
+    await this.redis.del(SOCIETIES_CACHE_KEY);
     return this.getSociety(id);
   }
 

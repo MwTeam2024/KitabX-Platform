@@ -15,38 +15,49 @@ export class WishlistService {
       include: { book: true },
       orderBy: { createdAt: 'desc' },
     });
+    if (!rows.length) return [];
 
-    const results = await Promise.all(
-      rows.map(async (row) => {
-        const activeListing = await this.prisma.bookListing.findFirst({
-          where: { bookId: row.bookId, status: 'ACTIVE', ownerId: { not: userId } },
-          include: { owner: true, photos: { orderBy: { sortOrder: 'asc' } } },
-          orderBy: { createdAt: 'asc' },
-        });
-        const requested = activeListing
-          ? await this.prisma.bookRequest.findFirst({
-              where: {
-                listingId: activeListing.id,
-                requesterId: userId,
-                status: { in: ['REQUESTED', 'ACCEPTED', 'PICKUP_SCHEDULED'] },
-              },
-            })
-          : null;
+    // Was one findFirst (listing) + one findFirst (request) per wishlisted
+    // book — a 20-book wishlist cost ~40 extra round trips. Two batched
+    // findManys instead, with the "earliest active listing per book" and
+    // "did I request that specific listing" logic done in memory.
+    const bookIds = rows.map((r) => r.bookId);
+    const activeListings = await this.prisma.bookListing.findMany({
+      where: { bookId: { in: bookIds }, status: 'ACTIVE', ownerId: { not: userId } },
+      include: { owner: true, photos: { orderBy: { sortOrder: 'asc' } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const listingByBookId = new Map();
+    for (const listing of activeListings) {
+      if (!listingByBookId.has(listing.bookId)) listingByBookId.set(listing.bookId, listing);
+    }
 
-        return {
-          bookId: row.book.id,
-          key: activeListing?.id || row.book.id,
-          title: row.book.title,
-          author: row.book.author,
-          genre: row.book.genre,
-          available: !!activeListing,
-          requested: !!requested,
-          ownerName: activeListing?.owner?.name || null,
-          photos: activeListing?.photos?.map((p) => p.imageUrl) || [],
-        };
-      }),
-    );
-    return results;
+    const listingIds = [...listingByBookId.values()].map((l) => l.id);
+    const myRequests = listingIds.length
+      ? await this.prisma.bookRequest.findMany({
+          where: {
+            listingId: { in: listingIds },
+            requesterId: userId,
+            status: { in: ['REQUESTED', 'ACCEPTED', 'PICKUP_SCHEDULED'] },
+          },
+        })
+      : [];
+    const requestedListingIds = new Set(myRequests.map((r) => r.listingId));
+
+    return rows.map((row) => {
+      const activeListing = listingByBookId.get(row.bookId) || null;
+      return {
+        bookId: row.book.id,
+        key: activeListing?.id || row.book.id,
+        title: row.book.title,
+        author: row.book.author,
+        genre: row.book.genre,
+        available: !!activeListing,
+        requested: activeListing ? requestedListingIds.has(activeListing.id) : false,
+        ownerName: activeListing?.owner?.name || null,
+        photos: activeListing?.photos?.map((p) => p.imageUrl) || [],
+      };
+    });
   }
 
   async add(userId, bookId) {

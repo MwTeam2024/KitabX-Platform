@@ -84,7 +84,7 @@ export default function BookDetailView({ bookKey }) {
   // edit/pause/remove — the exchange is done. Only a still-active listing
   // I actually own should get the owner-management controls.
   const canManage = mine && book.status !== 'Given away' && book.status !== 'Received';
-  const requested = requestedKeys.includes(bookKey);
+  const requested = requestedKeys.has(bookKey);
 
   const onRequest = async () => {
     const result = await requestBook(bookKey);

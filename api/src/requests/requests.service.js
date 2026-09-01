@@ -133,8 +133,16 @@ export class RequestsService {
       const competing = await tx.bookRequest.findMany({
         where: { listingId: request.listingId, status: 'REQUESTED', id: { not: requestId } },
       });
+      // The status flip is identical for every row — one updateMany instead
+      // of N updates; credit-release and notification still need one row
+      // each, so those stay in the loop.
+      if (competing.length) {
+        await tx.bookRequest.updateMany({
+          where: { id: { in: competing.map((c) => c.id) } },
+          data: { status: 'DECLINED', declinedAt: new Date() },
+        });
+      }
       for (const other of competing) {
-        await tx.bookRequest.update({ where: { id: other.id }, data: { status: 'DECLINED', declinedAt: new Date() } });
         await releaseReservedCredit(tx, {
           userId: other.requesterId,
           referenceId: other.id,

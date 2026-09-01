@@ -170,8 +170,13 @@ export function AppDataProvider({ children }) {
 
   // ---- exchanges / requests ----
 
+  // A Set, not an array — BookGrid checks membership once per card in a
+  // grid that can hold dozens of them; `.includes` there was an O(n²) scan
+  // over the whole grid on every render.
   const requestedKeys = useMemo(
-    () => exchanges.filter((e) => e.role === 'receiver' && e.status !== 'done' && !isTerminal(e.stage)).map((e) => e.bookKey),
+    () => new Set(
+      exchanges.filter((e) => e.role === 'receiver' && e.status !== 'done' && !isTerminal(e.stage)).map((e) => e.bookKey),
+    ),
     [exchanges],
   );
 
@@ -439,13 +444,21 @@ export function AppDataProvider({ children }) {
     if (!socket.connected) socket.connect();
 
     const onLiveUpdate = () => {
+      // A notification of any type commonly means one of these changed too
+      // (someone requested/returned a book, a wishlisted title reopened, a
+      // handover just granted a credit, ...) — refresh all of them here so
+      // whichever screen the user is already sitting on updates itself
+      // instead of only catching up the next time they navigate to it.
       refreshExchanges().catch(() => {});
+      refreshMyBooks().catch(() => {});
+      refreshWishlist().catch(() => {});
+      refreshCredits().catch(() => {});
       // refreshChatThreads().catch(() => {}); // chat switched off — see chat.module.js
       dispatch(fetchNotifications());
     };
     socket.on('notification:new', onLiveUpdate);
     return () => socket.off('notification:new', onLiveUpdate);
-  }, [sessionUser?.id, refreshExchanges, dispatch]);
+  }, [sessionUser?.id, refreshExchanges, refreshMyBooks, refreshWishlist, refreshCredits, dispatch]);
 
   // §16/§35: the socket push above now delivers the common case near-
   // instantly — this interval is just the safety net for a dropped/still-
@@ -454,6 +467,9 @@ export function AppDataProvider({ children }) {
   // worst case a user actually notices.
   useInterval(() => {
     refreshExchanges().catch(() => {});
+    refreshMyBooks().catch(() => {});
+    refreshWishlist().catch(() => {});
+    refreshCredits().catch(() => {});
     // refreshChatThreads().catch(() => {}); // chat switched off — see chat.module.js
     dispatch(fetchNotifications());
   }, 45000, { enabled: !!sessionUser?.id });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Icon from '@/components/ui/Icon';
 import ScreenHeader from '@/components/ui/ScreenHeader';
@@ -20,7 +20,12 @@ import { useToast } from '@/components/ui/ToastProvider';
 export default function WishlistPage() {
   const router = useRouter();
   const showToast = useToast();
-  const { wishlist, toggleWishlist } = useAppData();
+  const { wishlist, toggleWishlist, refreshWishlist } = useAppData();
+
+  // Same reasoning as My Shelf/Credits — availability/requested status can
+  // change from actions this screen didn't cause, so fetch fresh on open
+  // rather than trusting whatever was last loaded.
+  useEffect(() => { refreshWishlist().catch(() => {}); }, [refreshWishlist]);
 
   const saved = useMemo(
     () => wishlist.map((w) => ({ ...w, ...coverForDraft({ title: w.title, author: w.author, genre: w.genre }) })),

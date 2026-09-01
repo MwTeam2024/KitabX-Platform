@@ -15,7 +15,7 @@ export default function BookGrid({ books, emptyTitle = 'No books nearby yet.', e
   return (
     <div className="book-grid pad-nav">
       {books.map((book) => (
-        <BookCard key={book.key} book={book} requested={requestedKeys.includes(book.key)} />
+        <BookCard key={book.key} book={book} requested={requestedKeys.has(book.key)} />
       ))}
     </div>
   );

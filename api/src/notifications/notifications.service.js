@@ -41,15 +41,27 @@ export class NotificationsService {
       data: { userId, type, title, body, entityType: entityType || null, entityId: entityId || null },
     });
 
-    // Push delivery is best-effort and must never fail the caller's transaction —
-    // queue it after the fact rather than awaiting inside the caller's tx.
-    if (this.firebase.isConfigured()) {
-      this._pushAsync(userId, notification).catch(() => {});
-    }
-    try {
-      this.gateway.emitToUser(userId, 'notification:new', notification);
-    } catch {
-      // A socket-layer hiccup must never fail the caller's transaction either.
+    const deliver = () => {
+      // Push delivery is best-effort and must never fail the caller's
+      // transaction — fire-and-forget either way.
+      if (this.firebase.isConfigured()) {
+        this._pushAsync(userId, notification).catch(() => {});
+      }
+      try {
+        this.gateway.emitToUser(userId, 'notification:new', notification);
+      } catch {
+        // A socket-layer hiccup must never fail the caller's transaction either.
+      }
+    };
+
+    // Called from inside a `$transaction(async (tx) => ...)`: queue the
+    // push instead of firing it now, so a client that reacts to it by
+    // refetching never races the not-yet-committed transaction (see
+    // prisma.service.js). Called standalone: nothing to wait on, fire now.
+    if (client?.__pendingSideEffects) {
+      client.__pendingSideEffects.push(deliver);
+    } else {
+      deliver();
     }
     return notification;
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Icon from '@/components/ui/Icon';
 import ScreenHeader from '@/components/ui/ScreenHeader';
@@ -18,8 +18,15 @@ const RECEIVED = 'Received';
 /** Screen 11 — My Shelf: active/reserved/completed books plus the credit summary (§7). */
 export default function MyShelfPage() {
   const router = useRouter();
-  const { books, credits } = useAppData();
+  const { books, credits, refreshMyBooks } = useAppData();
   const [tab, setTab] = useState('mybooks');
+
+  // `books` only otherwise updates via this user's own listing actions, a
+  // notification-triggered refresh, or the 45s poll — none of which fire on
+  // a plain client-side navigation to this page, so a status change made
+  // elsewhere (another device, another tab) could sit stale here until one
+  // of those happened to fire. Fetch fresh every time this screen opens.
+  useEffect(() => { refreshMyBooks().catch(() => {}); }, [refreshMyBooks]);
 
   const groups = useMemo(() => {
     const mine = Object.values(books).filter((b) => b.mine);

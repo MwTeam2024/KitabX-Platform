@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 import HeaderActions from '@/components/layout/HeaderActions';
@@ -23,8 +23,13 @@ const EMPTY = {
 export default function ExchangeList({ initialTab = 'forme' }) {
   const router = useRouter();
   const showToast = useToast();
-  const { exchanges, acceptExchange, declineExchange } = useAppData();
+  const { exchanges, acceptExchange, declineExchange, refreshExchanges } = useAppData();
   const [tab, setTab] = useState(initialTab);
+
+  // The socket push + 45s poll (AppDataContext) keep this fresh in the
+  // background, but neither fires the instant this screen is opened — fetch
+  // once on mount so the very first view isn't waiting on either.
+  useEffect(() => { refreshExchanges().catch(() => {}); }, [refreshExchanges]);
 
   const groups = useMemo(() => ({
     forme: exchanges.filter((e) => e.status === 'forme' && !isTerminal(e.stage)),

@@ -308,6 +308,7 @@ export class AdminService {
     const society = await this.prisma.society.findUnique({ where: { id: societyId } });
     if (!society) throw new NotFoundException('Society not found');
     const updated = await this.prisma.society.update({ where: { id: societyId }, data: { isActive: false } });
+    await this.societiesService.invalidateCache();
     await this.auditLog.record({
       actorAdminId: adminId,
       action: 'SOCIETY_REMOVED',

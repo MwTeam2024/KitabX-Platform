@@ -1,12 +1,20 @@
 'use client';
 
+import { memo } from 'react';
 import { useRouter } from 'next/navigation';
 import Icon from '@/components/ui/Icon';
 import { BookCover } from './BookCover';
 import WishlistButton from '@/components/wishlist/WishlistButton';
 
-/** Discovery grid card — cover, wishlist heart, genre pill and distance. */
-export default function BookCard({ book, requested = false }) {
+/**
+ * Discovery grid card — cover, wishlist heart, genre pill and distance.
+ * Memoized: WishlistButton subscribes to the wishlist itself via context, so
+ * this card only needs to re-render when its own `book`/`requested` props
+ * change, not on every unrelated AppDataContext update (credits, exchanges,
+ * chat, admin state, ...) that would otherwise re-render every card in a
+ * discovery grid holding dozens of them.
+ */
+function BookCard({ book, requested = false }) {
   const router = useRouter();
 
   return (
@@ -40,3 +48,5 @@ export default function BookCard({ book, requested = false }) {
     </div>
   );
 }
+
+export default memo(BookCard);

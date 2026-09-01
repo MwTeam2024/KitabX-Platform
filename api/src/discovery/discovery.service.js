@@ -1,6 +1,10 @@
 import { Dependencies, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../common/redis/redis.service';
 import { toListingLocation } from '../common/serializers/user.serializer';
+
+const STATS_CACHE_KEY = 'discovery:stats';
+const STATS_CACHE_TTL_SECONDS = 30;
 
 /**
  * §9: same-society first, then nearby societies within a selectable radius,
@@ -10,11 +14,12 @@ import { toListingLocation } from '../common/serializers/user.serializer';
  * (see schema.prisma), so the radius half of this is raw SQL; the listing
  * fetch + text/genre filtering stays on the regular Prisma client.
  */
-@Dependencies(PrismaService)
+@Dependencies(PrismaService, RedisService)
 @Injectable()
 export class DiscoveryService {
-  constructor(prisma) {
+  constructor(prisma, redis) {
     this.prisma = prisma;
+    this.redis = redis;
   }
 
   async discover(viewer, { radiusKm = 0.5, genre, language, condition, q, sort = 'newest', includeNearby = true } = {}) {
@@ -126,13 +131,21 @@ export class DiscoveryService {
   }
 
   /** Real, platform-wide counts — never scoped to the viewer's own society. */
+  /** Platform-wide, loaded on every home-screen visit — a few seconds of
+   * staleness on a "total books/members/societies" counter is unnoticeable,
+   * so cache it rather than running 3 COUNTs on every load. */
   async stats() {
+    const cached = await this.redis.get(STATS_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
+
     const [totalBooks, totalMembers, totalSocieties] = await Promise.all([
       this.prisma.bookListing.count({ where: { status: 'ACTIVE' } }),
       this.prisma.user.count({ where: { isActive: true } }),
       this.prisma.society.count({ where: { isActive: true } }),
     ]);
-    return { totalBooks, totalMembers, totalSocieties };
+    const result = { totalBooks, totalMembers, totalSocieties };
+    await this.redis.set(STATS_CACHE_KEY, JSON.stringify(result), STATS_CACHE_TTL_SECONDS);
+    return result;
   }
 
   _toCardDto(listing, distanceKm) {

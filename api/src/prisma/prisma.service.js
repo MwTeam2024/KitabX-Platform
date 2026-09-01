@@ -35,6 +35,38 @@ export class PrismaService extends PrismaClient {
       },
     });
     Object.assign(this, extended);
+
+    // Notifications created inside a `$transaction(async (tx) => ...)`
+    // block (accept, pickup, handover, ...) used to push `notification:new`
+    // over the socket the instant the row was written — but that's still
+    // mid-transaction, before Postgres has actually committed. A client
+    // that reacts to the push by immediately refetching (AppDataContext's
+    // socket handler does exactly this) could occasionally read pre-commit
+    // state and show stale data despite the notification having "already
+    // arrived." Wrapping `$transaction` here lets `NotificationsService`
+    // queue its side effects (socket emit, FCM push) on `tx` and have this
+    // fire them only once `$transaction` itself resolves — which Prisma
+    // guarantees is after commit — with zero changes needed at any of the
+    // ~10 call sites that create notifications inside a transaction.
+    const runTransaction = this.$transaction.bind(this);
+    this.$transaction = async (arg, options) => {
+      if (typeof arg !== 'function') return runTransaction(arg, options);
+      let tx;
+      const result = await runTransaction(async (txClient) => {
+        tx = txClient;
+        tx.__pendingSideEffects = [];
+        return arg(txClient);
+      }, options);
+      for (const run of tx.__pendingSideEffects) {
+        try {
+          run();
+        } catch {
+          // Same best-effort contract as before: a push/socket hiccup must
+          // never surface as a failure of the (already-committed) transaction.
+        }
+      }
+      return result;
+    };
   }
 
   async onModuleInit() {

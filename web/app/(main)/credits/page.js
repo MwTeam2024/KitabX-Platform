@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import Icon from '@/components/ui/Icon';
@@ -21,8 +22,10 @@ const RULES = [
  * backend transactions are the source of truth.
  */
 export default function CreditsPage() {
-  const { credits, creditHistory, deleteCreditTransaction, clearCreditHistory } = useAppData();
+  const { credits, creditHistory, deleteCreditTransaction, clearCreditHistory, refreshCredits } = useAppData();
   const showToast = useToast();
+
+  useEffect(() => { refreshCredits().catch(() => {}); }, [refreshCredits]);
 
   const onDelete = async (id) => {
     try {

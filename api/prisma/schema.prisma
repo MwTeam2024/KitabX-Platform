@@ -275,6 +275,11 @@ model BookListing {
   @@index([bookId])
   @@index([status])
   @@index([societyId])
+  // Discovery's `where: { status: 'ACTIVE', societyId: { in: [...] } }` runs
+  // on every home-feed load — a composite index lets Postgres satisfy it
+  // with one index scan instead of bitmap-AND-ing the two single-column ones.
+  @@index([societyId, status])
+  @@index([ownerId, status])
   @@map("book_listing")
 }
 
@@ -328,6 +333,10 @@ model CreditTransaction {
   createdAt     DateTime                @default(now()) @map("created_at")
   hiddenAt      DateTime?               @map("hidden_at")
   user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // credits.service.js's history/balance queries always filter userId +
+  // hiddenAt together.
+  @@index([userId, hiddenAt])
 
   @@index([userId])
   @@index([createdAt])
@@ -488,6 +497,9 @@ model Notification {
   user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  // unreadCount/markAllRead filter userId + isRead together on every
+  // header-bell load and poll tick.
+  @@index([userId, isRead])
   @@index([isRead])
   @@map("notifications")
 }

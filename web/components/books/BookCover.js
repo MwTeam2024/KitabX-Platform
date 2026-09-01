@@ -6,6 +6,8 @@
  * entries where no upload happened yet).
  */
 
+import { cldThumb } from '@/lib/cloudinary';
+
 function RealPhoto({ src, className, style }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -17,7 +19,7 @@ function RealPhoto({ src, className, style }) {
 export function BookCover({ book, className = '', style, showAuthor = false, titleSize, photoUrl }) {
   const src = photoUrl || book.photos?.[0];
   if (src) {
-    return <div className={`bcov ${className}`} style={{ ...style, padding: 0, overflow: 'hidden' }}><RealPhoto src={src} /></div>;
+    return <div className={`bcov ${className}`} style={{ ...style, padding: 0, overflow: 'hidden' }}><RealPhoto src={cldThumb(src, { w: 240 })} /></div>;
   }
   return (
     <div className={`bcov ${book.cov} ${className}`} style={style}>
@@ -34,7 +36,7 @@ export function BookCover({ book, className = '', style, showAuthor = false, tit
 export function BookSpine({ book, className = '', style, titleSize = 9 }) {
   const src = book.photos?.[0];
   if (src) {
-    return <div className={`bcov ${className}`} style={{ width: '100%', height: '100%', padding: 0, overflow: 'hidden', ...style }}><RealPhoto src={src} /></div>;
+    return <div className={`bcov ${className}`} style={{ width: '100%', height: '100%', padding: 0, overflow: 'hidden', ...style }}><RealPhoto src={cldThumb(src, { w: 120 })} /></div>;
   }
   return (
     <div className={`bcov ${book.cov} ${className}`} style={{ width: '100%', height: '100%', ...style }}>
