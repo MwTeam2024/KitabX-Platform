@@ -97,6 +97,20 @@ export class ReportsService {
       entityType: 'report',
       entityId: id,
     });
+    // The reported user themselves was never told anything closed out — same
+    // gap as the credit-correction/listing-removal fixes. Deliberately
+    // generic wording (not "someone reported you") since resolving a report
+    // doesn't necessarily mean it was upheld.
+    if (report.reportedUserId) {
+      await this.notifications.create(this.prisma, {
+        userId: report.reportedUserId,
+        type: 'REPORT',
+        title: 'A report involving your account was reviewed',
+        body: 'Our trust & safety team has finished reviewing it.',
+        entityType: 'report',
+        entityId: id,
+      }).catch(() => {});
+    }
     await this.auditLog.record({
       actorAdminId: adminId,
       action: 'REPORT_RESOLVED',

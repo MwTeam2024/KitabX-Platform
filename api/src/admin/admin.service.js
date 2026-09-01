@@ -417,9 +417,19 @@ export class AdminService {
   }
 
   async removeListing(listingId, adminId) {
-    const listing = await this.prisma.bookListing.findUnique({ where: { id: listingId } });
+    const listing = await this.prisma.bookListing.findUnique({ where: { id: listingId }, include: { book: true } });
     if (!listing) throw new NotFoundException('Listing not found');
     const updated = await this.prisma.bookListing.update({ where: { id: listingId }, data: { status: 'REMOVED', removedAt: new Date() } });
+    // The owner's listing just vanished from their own shelf with no
+    // explanation otherwise — same gap as the credit-correction fix above.
+    await this.notifications.create(this.prisma, {
+      userId: listing.ownerId,
+      type: 'ADMIN',
+      title: 'Your listing was removed',
+      body: `"${listing.book.title}" was removed by an admin.`,
+      entityType: null,
+      entityId: null,
+    }).catch(() => {});
     await this.auditLog.record({
       actorAdminId: adminId,
       action: 'LISTING_REMOVED',
@@ -551,7 +561,23 @@ export class AdminService {
   async correctCredit(userId, amount, reason, adminId) {
     if (!Number.isInteger(amount) || amount === 0) throw new BadRequestException('amount must be a non-zero integer');
     if (!reason?.trim()) throw new BadRequestException('A reason is required for manual credit corrections');
-    const result = await this.prisma.$transaction((tx) => adminAdjustCredit(tx, { userId, amount, reason: reason.trim() }));
+    const trimmedReason = reason.trim();
+    const result = await this.prisma.$transaction(async (tx) => {
+      const adjusted = await adminAdjustCredit(tx, { userId, amount, reason: trimmedReason });
+      // Was silent before — the balance changed but nothing told the user,
+      // so it only ever showed up once they happened to reload or the 45s
+      // poll caught up. Same notification path as every other credit
+      // change (handover, cancellation), so it also pushes live instantly.
+      await this.notifications.create(tx, {
+        userId,
+        type: 'ADMIN',
+        title: amount > 0 ? 'Credit added to your account' : 'Credit adjusted',
+        body: `${amount > 0 ? '+' : ''}${amount} credit${Math.abs(amount) === 1 ? '' : 's'} — ${trimmedReason}`,
+        entityType: null,
+        entityId: null,
+      });
+      return adjusted;
+    });
     await this.auditLog.record({
       actorAdminId: adminId,
       action: 'CREDIT_ADJUSTED',
