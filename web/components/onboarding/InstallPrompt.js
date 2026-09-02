@@ -71,7 +71,7 @@ export default function InstallPrompt() {
             <button className="link-green" onClick={install} style={{ fontSize: 12 }}>Install now</button>
           </>
         ) : isIos ? (
-          <>Tap Share, then &ldquo;Add to Home Screen&rdquo; to install KitabX.</>
+          <>Tap Share, then &ldquo;Add to Home Screen&rdquo; to install KitabX — this is also required for notifications to work on iPhone/iPad.</>
         ) : (
           <>Open your browser menu (⋮) and tap &ldquo;Install app&rdquo; or &ldquo;Add to Home screen&rdquo;.</>
         )}

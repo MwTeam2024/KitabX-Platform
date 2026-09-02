@@ -29,16 +29,29 @@ export async function requestPushPermission() {
   if (!app) return 'granted'; // permission held; token registration waits on config
 
   try {
+    // ServiceWorkerRegistrar.js deliberately skips registering `sw.js` in
+    // development (so HMR isn't intercepted by a cached shell) — so there's
+    // nothing for FCM to attach to here. `navigator.serviceWorker.ready`
+    // would hang forever waiting for a controller that will never arrive in
+    // that case, so check with the non-blocking `getRegistration()` instead.
+    // Without an explicit registration, getToken() would otherwise try to
+    // register its own default `/firebase-messaging-sw.js`, a file this app
+    // doesn't have (push is already handled by the app's own `sw.js`).
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) return 'granted'; // no SW active (e.g. local dev) — in-app notifications still work
+
     const { getMessaging, getToken } = await import('firebase/messaging');
     const token = await getToken(getMessaging(app), {
       vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+      serviceWorkerRegistration: registration,
     });
     if (token) {
       const { notificationsService } = await import('@/services/notifications.service');
-      await notificationsService.registerPushToken(token).catch(() => null);
+      await notificationsService.registerDevice(token, 'web').catch(() => null);
     }
   } catch {
-    // Messaging unavailable (unsupported browser or missing VAPID key) — in-app still works.
+    // Messaging unavailable (unsupported browser, missing VAPID key, SW
+    // registration failure, ...) — in-app notifications still work.
   }
   return 'granted';
 }

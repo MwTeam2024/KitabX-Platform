@@ -14,6 +14,7 @@ import {
 } from '@/store/slices/notificationSlice';
 import { useToast } from '@/components/ui/ToastProvider';
 import { requestPushPermission } from '@/lib/firebase';
+import { isIosDevice, isStandalone } from '@/lib/platform';
 import { timeAgo } from '@/lib/dates';
 
 /**
@@ -29,6 +30,15 @@ export default function NotificationsPage() {
   useEffect(() => { dispatch(fetchNotifications()); }, [dispatch]);
 
   const enablePush = async () => {
+    // iOS Safari only exposes web push at all once the site is installed to
+    // the Home Screen (iOS 16.4+) — calling requestPushPermission() in a
+    // regular tab there just silently resolves 'denied' with no indication
+    // why, which reads as broken. Catch that case first with a message that
+    // actually explains the fix, instead of the generic denied toast.
+    if (isIosDevice() && !isStandalone()) {
+      showToast('Install KitabX to your Home Screen first to enable notifications on iPhone/iPad');
+      return;
+    }
     const result = await requestPushPermission().catch(() => 'denied');
     dispatch(setPushPermission(result));
     showToast(
