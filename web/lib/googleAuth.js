@@ -89,10 +89,17 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
     });
 
     // Width defaults to the container's own (already `width:100%` in
-    // practice) size, so the common case — "match whatever row this sits
-    // in" — needs only a `targetHeight` from the caller, not a hardcoded
-    // pixel width that would drift if the layout around it ever changes.
-    const finalTargetWidth = targetWidth || containerWidth;
+    // practice) size — re-measured live in applyFit() on every fit, NOT
+    // captured once here. A caller's page can still be running its own
+    // mount/opening transition (e.g. a scale-in animation on first paint)
+    // when this first runs, so an early one-time measurement can lock in a
+    // too-small width from mid-transition; a real device inspection showed
+    // exactly that (`transform: scale(1, 1.136)` — scaleX of 1 meant no
+    // width correction was ever applied). Reading it fresh each time, and
+    // re-fitting whenever the container's own size actually changes (see
+    // the ResizeObserver below), means it always matches the FINAL
+    // settled layout, not whatever it was at first mount.
+    const getTargetWidth = () => targetWidth || Math.round(container.getBoundingClientRect().width) || containerWidth;
 
     // A returning visitor already signed into a Google account in this
     // browser gets a *personalized* button ("Sign in as <name>", with their
@@ -134,6 +141,7 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
       // role="button" — harmless but looks like a stray border sitting on
       // top of an otherwise plain white pill.
       rendered.style.outline = 'none';
+      const finalTargetWidth = getTargetWidth();
       if (finalTargetWidth || targetHeight) {
         // Measure the NATURAL size, not whatever scale we last applied —
         // reading getBoundingClientRect() after our own transform would
@@ -174,11 +182,21 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
 
     observer = new MutationObserver(scheduleApplyFit);
     scheduleApplyFit();
+    // A CSS-driven size change on `container` (its own mount/opening
+    // transition finishing, an orientation change, a sidebar collapsing
+    // elsewhere on the page) is NOT a DOM mutation at all — nothing added,
+    // removed, or attribute-changed — so the MutationObserver above would
+    // never see it. A ResizeObserver reacts to the real layout size
+    // regardless of what caused it, which is exactly what's needed to
+    // catch the too-small-target-width case described above.
+    const resizeObserver = new ResizeObserver(scheduleApplyFit);
+    resizeObserver.observe(container);
     // Google's DOM settles within a couple of seconds even for the slowest
     // (personalized) variant — no need to watch forever. Also acts as a
     // failsafe reveal in case sizing never settled for some reason.
     setTimeout(() => {
       observer.disconnect();
+      resizeObserver.disconnect();
       clearTimeout(settleTimer);
       container.style.visibility = 'visible';
     }, 8000);
