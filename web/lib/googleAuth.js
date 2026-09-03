@@ -130,9 +130,15 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
 
     // Debounced: only actually run applyFit (and reveal the container) once
     // 200ms have passed with no further DOM changes, instead of reacting to
-    // every intermediate pass Google makes while it's still settling.
+    // every intermediate pass Google makes while it's still settling. Also
+    // re-hides on EVERY mutation, not just the first — Google can still swap
+    // its DOM well after the button was already revealed (e.g. avatar data
+    // arriving late for the personalized variant), and without re-hiding
+    // here that later swap would show as a visible resize instead of being
+    // caught before it's ever shown.
     let settleTimer = null;
     const scheduleApplyFit = () => {
+      container.style.visibility = 'hidden';
       clearTimeout(settleTimer);
       settleTimer = setTimeout(() => {
         applyFit();
