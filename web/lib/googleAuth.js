@@ -86,27 +86,50 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
     // in" — needs only a `targetHeight` from the caller, not a hardcoded
     // pixel width that would drift if the layout around it ever changes.
     const finalTargetWidth = targetWidth || containerWidth;
+
     // A returning visitor already signed into a Google account in this
     // browser gets a *personalized* button ("Sign in as <name>", with their
-    // avatar) instead of the generic one — it takes noticeably longer to
-    // inject (fetching that account's name/photo first), so this needs a
-    // much longer leash than the generic button ever does or the poll gives
-    // up before Google's finished, leaving it at its own small default size.
-    const rendered = await pollFor(() => container.querySelector('[role="button"]'), 180);
-    if (rendered) {
+    // avatar) instead of the generic one. That variant isn't just slower to
+    // inject — Google renders a first pass, then SWAPS its inner content
+    // (name/avatar) for the real account data once that finishes loading,
+    // discarding whatever we'd already applied to the first pass. A single
+    // poll-then-apply (even with a long timeout) only ever catches one of
+    // those passes. A MutationObserver re-applies the fit on every DOM
+    // change instead, so it survives however many passes Google does.
+    const applyFit = () => {
+      const rendered = container.querySelector('[role="button"]');
+      if (!rendered) return;
       // Google's own chrome shows the browser's default focus ring (a
       // blue/purple outline) after being clicked, same as any div with
       // role="button" — harmless but looks like a stray border sitting on
       // top of an otherwise plain white pill.
       rendered.style.outline = 'none';
-      if (finalTargetWidth || targetHeight) {
-        const rect = rendered.getBoundingClientRect();
-        const scaleX = finalTargetWidth ? finalTargetWidth / rect.width : 1;
-        const scaleY = targetHeight ? targetHeight / rect.height : 1;
-        rendered.style.transform = `scale(${scaleX}, ${scaleY})`;
-        rendered.style.transformOrigin = 'center';
+      if (!finalTargetWidth && !targetHeight) return;
+      // Measure the NATURAL size, not whatever scale we last applied —
+      // reading getBoundingClientRect() after our own transform would
+      // return the already-scaled size and compound on every re-run.
+      const prevTransform = rendered.style.transform;
+      rendered.style.transform = 'none';
+      const rect = rendered.getBoundingClientRect();
+      if (!rect.width || !rect.height) {
+        rendered.style.transform = prevTransform;
+        return;
       }
-    }
+      const scaleX = finalTargetWidth ? finalTargetWidth / rect.width : 1;
+      const scaleY = targetHeight ? targetHeight / rect.height : 1;
+      rendered.style.transform = `scale(${scaleX}, ${scaleY})`;
+      rendered.style.transformOrigin = 'center';
+    };
+
+    applyFit();
+    // childList/subtree only (not `attributes`) — our own applyFit() writes
+    // are attribute (style) changes, so watching those too would make the
+    // observer re-trigger itself on every write it just made.
+    const observer = new MutationObserver(applyFit);
+    observer.observe(container, { childList: true, subtree: true });
+    // Google's DOM settles within a couple of seconds even for the slowest
+    // (personalized) variant — no need to watch forever.
+    setTimeout(() => observer.disconnect(), 8000);
   } catch (err) {
     onError?.(err);
   }
