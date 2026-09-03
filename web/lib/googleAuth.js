@@ -109,14 +109,26 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
     // as nodes being added/removed — a previous version of this only watched
     // childList and missed that case entirely, so a late resize like that
     // left our stale scale (computed against the old, now-wrong natural
-    // size) applied forever. Watching attributes too closes that gap; the
-    // observer is disconnected for the duration of our own style writes
-    // inside applyFit so those don't re-trigger themselves.
+    // size) applied forever. Watching attributes too closes that gap.
+    const observerOpts = { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] };
     let observer = null;
+    // The observer is watching `container` itself (not just its subtree),
+    // so OUR OWN writes onto `container.style.visibility` are just as
+    // visible to it as anything Google does — every write below (both this
+    // helper and inside applyFit) must go through here, disconnected before
+    // and re-armed after, or the observer reacts to its own side effects and
+    // never stops re-triggering itself (this exact bug shipped once already:
+    // hide -> observed -> hide again -> observed -> ... forever, button
+    // stuck invisible).
+    const withObserverPaused = (fn) => {
+      observer?.disconnect();
+      fn();
+      observer?.observe(container, observerOpts);
+    };
+
     const applyFit = () => {
       const rendered = container.querySelector('[role="button"]');
       if (!rendered) return;
-      observer?.disconnect();
       // Google's own chrome shows the browser's default focus ring (a
       // blue/purple outline) after being clicked, same as any div with
       // role="button" — harmless but looks like a stray border sitting on
@@ -138,7 +150,6 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
           rendered.style.transformOrigin = 'center';
         }
       }
-      observer?.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
     };
 
     // Debounced: only actually run applyFit (and reveal the container) once
@@ -151,17 +162,18 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
     // caught before it's ever shown.
     let settleTimer = null;
     const scheduleApplyFit = () => {
-      container.style.visibility = 'hidden';
+      withObserverPaused(() => { container.style.visibility = 'hidden'; });
       clearTimeout(settleTimer);
       settleTimer = setTimeout(() => {
-        applyFit();
-        container.style.visibility = 'visible';
+        withObserverPaused(() => {
+          applyFit();
+          container.style.visibility = 'visible';
+        });
       }, 200);
     };
 
     observer = new MutationObserver(scheduleApplyFit);
     scheduleApplyFit();
-    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
     // Google's DOM settles within a couple of seconds even for the slowest
     // (personalized) variant — no need to watch forever. Also acts as a
     // failsafe reveal in case sizing never settled for some reason.
