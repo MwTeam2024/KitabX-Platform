@@ -103,29 +103,42 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
     // poll-then-apply (even with a long timeout) only ever catches one of
     // those passes. A MutationObserver re-applies the fit on every DOM
     // change instead, so it survives however many passes Google does.
+    //
+    // That swap can also happen as an ATTRIBUTE change on an element already
+    // in the tree (Google resizing its own button/iframe in place), not just
+    // as nodes being added/removed — a previous version of this only watched
+    // childList and missed that case entirely, so a late resize like that
+    // left our stale scale (computed against the old, now-wrong natural
+    // size) applied forever. Watching attributes too closes that gap; the
+    // observer is disconnected for the duration of our own style writes
+    // inside applyFit so those don't re-trigger themselves.
+    let observer = null;
     const applyFit = () => {
       const rendered = container.querySelector('[role="button"]');
       if (!rendered) return;
+      observer?.disconnect();
       // Google's own chrome shows the browser's default focus ring (a
       // blue/purple outline) after being clicked, same as any div with
       // role="button" — harmless but looks like a stray border sitting on
       // top of an otherwise plain white pill.
       rendered.style.outline = 'none';
-      if (!finalTargetWidth && !targetHeight) return;
-      // Measure the NATURAL size, not whatever scale we last applied —
-      // reading getBoundingClientRect() after our own transform would
-      // return the already-scaled size and compound on every re-run.
-      const prevTransform = rendered.style.transform;
-      rendered.style.transform = 'none';
-      const rect = rendered.getBoundingClientRect();
-      if (!rect.width || !rect.height) {
-        rendered.style.transform = prevTransform;
-        return;
+      if (finalTargetWidth || targetHeight) {
+        // Measure the NATURAL size, not whatever scale we last applied —
+        // reading getBoundingClientRect() after our own transform would
+        // return the already-scaled size and compound on every re-run.
+        const prevTransform = rendered.style.transform;
+        rendered.style.transform = 'none';
+        const rect = rendered.getBoundingClientRect();
+        if (!rect.width || !rect.height) {
+          rendered.style.transform = prevTransform;
+        } else {
+          const scaleX = finalTargetWidth ? finalTargetWidth / rect.width : 1;
+          const scaleY = targetHeight ? targetHeight / rect.height : 1;
+          rendered.style.transform = `scale(${scaleX}, ${scaleY})`;
+          rendered.style.transformOrigin = 'center';
+        }
       }
-      const scaleX = finalTargetWidth ? finalTargetWidth / rect.width : 1;
-      const scaleY = targetHeight ? targetHeight / rect.height : 1;
-      rendered.style.transform = `scale(${scaleX}, ${scaleY})`;
-      rendered.style.transformOrigin = 'center';
+      observer?.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
     };
 
     // Debounced: only actually run applyFit (and reveal the container) once
@@ -146,12 +159,9 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
       }, 200);
     };
 
+    observer = new MutationObserver(scheduleApplyFit);
     scheduleApplyFit();
-    // childList/subtree only (not `attributes`) — our own applyFit() writes
-    // are attribute (style) changes, so watching those too would make the
-    // observer re-trigger itself on every write it just made.
-    const observer = new MutationObserver(scheduleApplyFit);
-    observer.observe(container, { childList: true, subtree: true });
+    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
     // Google's DOM settles within a couple of seconds even for the slowest
     // (personalized) variant — no need to watch forever. Also acts as a
     // failsafe reveal in case sizing never settled for some reason.
