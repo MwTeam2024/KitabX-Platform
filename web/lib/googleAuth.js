@@ -86,7 +86,13 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
     // in" — needs only a `targetHeight` from the caller, not a hardcoded
     // pixel width that would drift if the layout around it ever changes.
     const finalTargetWidth = targetWidth || containerWidth;
-    const rendered = await pollFor(() => container.querySelector('[role="button"]'));
+    // A returning visitor already signed into a Google account in this
+    // browser gets a *personalized* button ("Sign in as <name>", with their
+    // avatar) instead of the generic one — it takes noticeably longer to
+    // inject (fetching that account's name/photo first), so this needs a
+    // much longer leash than the generic button ever does or the poll gives
+    // up before Google's finished, leaving it at its own small default size.
+    const rendered = await pollFor(() => container.querySelector('[role="button"]'), 180);
     if (rendered) {
       // Google's own chrome shows the browser's default focus ring (a
       // blue/purple outline) after being clicked, same as any div with
