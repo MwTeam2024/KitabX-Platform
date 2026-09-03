@@ -134,7 +134,14 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
     };
 
     const applyFit = () => {
-      const rendered = container.querySelector('[role="button"]');
+      // Google renders an initial `[role="button"]` overlay div, then swaps
+      // to a bare `<iframe>` once its FedCM-based flow takes over (the
+      // overlay is REMOVED entirely at that point, not just restyled) — a
+      // real click test caught this live: the iframe is what's actually
+      // interactive afterward, and it carries none of our earlier scale, so
+      // it was sitting at Google's own unscaled native size (363x44 vs our
+      // 343x50 target). Fit whichever of the two is currently present.
+      const rendered = container.querySelector('[role="button"], iframe');
       if (!rendered) return;
       // Google's own chrome shows the browser's default focus ring (a
       // blue/purple outline) after being clicked, same as any div with
