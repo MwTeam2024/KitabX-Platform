@@ -2609,3 +2609,468 @@ UI state) back to the unfiltered set. Checked the corrected Condition/
 Language chip labels render correctly at 375px mobile width (the same
 pre-existing horizontally-scrollable `.chiprow` pattern already used
 elsewhere on this page, not a new issue).
+
+## Task 68 — Notification list never showed the body text at all (not just cancellation reasons) ✅
+User reported the cancellation reason wasn't showing up in the
+notification. Task 61's own verification had only checked the database
+row and the raw API response — not whether the actual notification LIST
+screen rendered it — so this had slipped through.
+
+**Investigation.** Found it precisely, in the frontend only — the
+backend was never the problem. `notificationSlice.js#toItem`, the
+function that normalizes each raw notification into what the UI reads,
+mapped `id`/`emoji`/`title`/`time`/`href`/`gold`/`isRead` but **never
+included `body` at all**. `apps/api/src/notifications/notifications.service.js#list`
+returns raw Prisma rows with `body` intact — the field reaches the
+frontend correctly, then gets silently dropped one step later, before
+`notifications/page.js` ever gets a chance to render it. And indeed that
+page's list item JSX only ever rendered `n.title`, never any body field
+— so even fixing the slice alone wouldn't have been enough on its own.
+This bug predates Task 61 entirely: it affects **every** notification
+type, not just cancellations — "New request for X" notifications were
+also only ever showing the bare title with no context, same for pickup/
+handover/expiry notifications.
+
+**Fix**: `notificationSlice.js#toItem` now includes `body: n.body`.
+`notifications/page.js`'s list item now renders it in a new line between
+the title and the timestamp, only when present.
+
+**Verified live end-to-end**, not just re-checking the DB: created a
+fresh accepted exchange via the real API, cancelled it with a real
+reason ("Book no longer available") as the requester, then logged in as
+the real other party (the owner) in the actual browser and opened
+Notifications — confirmed the new line reads exactly `The exchange for
+"Task 40 Bug Repro Book" was cancelled — Book no longer available.`
+Also incidentally confirmed this fixed an *older* cancellation
+notification from earlier Task 61 testing that had been sitting in the
+same inbox the whole time, unable to show its reason until now — and
+confirmed every other notification type in the same list (new requests,
+expired requests, pickup confirmations, handover verification) now also
+shows its real body text, since the bug was never cancellation-specific.
+Confirmed clean rendering and line-wrapping at 375px mobile width.
+
+## Task 69 — Wishlist: alert on listing reactivation, not just brand-new listings ✅
+User asked me to audit the wishlist feature against 7 expected
+capabilities (add/remove/view/availability/requested-status/alert-on-
+availability/auto-remove-or-mark-unavailable). Everything checked out
+except the alert: `createListing` already notified every wishlister when
+a *new* listing for their book went live, but `setPaused()` — which is
+how an existing listing goes from `PAUSED` back to `ACTIVE`, i.e. also
+"becomes available again" — never touched the wishlist table at all.
+
+**Fix**: `listings.service.js#setPaused` now fires the same `WISHLIST`
+notification (`"A wishlisted book is now available!"`) on the specific
+`PAUSED -> ACTIVE` edge, guarded so a redundant `setPaused(id, owner,
+false)` call on an already-active listing (a no-op) doesn't re-fire it.
+
+Verified live via the real API: wishlisted a fresh test listing as one
+user, paused it as the owner, unpaused it — confirmed exactly one new
+notification landed for the wishlister with the expected body text; a
+second redundant unpause call produced no duplicate.
+
+## Task 70 — Show real profile photo on the avatar, add a Settings entry to the Profile page ✅
+Two asks: (1) the header's small avatar chip and the Profile page's big
+avatar circle always rendered `user.initials` even when the user has an
+uploaded `profileImageUrl` — `profile/settings/page.js` already had the
+conditional-image-vs-initials pattern for its own edit-photo avatar, this
+just wasn't applied anywhere else the same avatar appears. (2) Profile
+page had no visible "Settings" entry — the avatar itself was already a
+button linking to `/profile/settings`, but nothing signalled that.
+
+**Fix**: `HeaderActions.js`'s avatar-chip and `profile/page.js`'s big
+avatar button now render the user's photo (`object-fit: cover`, clipped
+to the circle) when `profileImageUrl` is set, falling back to initials
+otherwise — same pattern as settings' own avatar. Added an explicit
+"Settings" menu-row (gear icon) to the Profile page, placed under
+Notification preferences per the user's follow-up on ordering.
+
+Verified live: set a test profile image via the real API, reloaded, and
+confirmed both avatars rendered the photo (screenshot) while a second
+account with no photo still showed initials; clicked the new Settings
+row and confirmed it lands on `/profile/settings`.
+
+## Task 71 — Intermittent "No match for that ISBN" on barcode scan ✅
+User reported this happens only sometimes for the same kind of scan.
+Traced the whole scan -> lookup pipeline and found two independent causes
+both collapsing into the same message:
+
+1. `scan/page.js#lookupIsbn`'s `catch` block treated every rejection —
+   Google Books rate-limited/down (`ServiceUnavailableException`, 503),
+   an expired session (401), a network timeout — identically to a real
+   404 "book not found", even though `google-books.service.js` already
+   distinguishes them server-side. A transient failure would show the
+   exact same "no match" as a genuine miss, and succeed moments later on
+   retry — which is exactly the "kabhi kabhi" pattern reported.
+2. Nothing validated the decoded barcode before sending it to the lookup
+   API. `barcode.js`'s scanner formats (EAN_13/EAN_8/UPC_A/UPC_E, kept
+   from an earlier fix for older/regional variants) mean a misread frame
+   or an unrelated barcode (a price sticker) can produce a syntactically-
+   fine string that was never going to match anything.
+
+**Fix**: `lib/barcode.js` gained `isValidIsbnBarcode()` — checks the
+Bookland 978/979 prefix and the real EAN-13 check digit. `scan/page.js`
+now runs this before ever calling the lookup API; a failing barcode just
+restarts the camera (via a `scanNonce` bump that re-triggers the scan
+effect on the same `<video>` element) instead of reporting a false "no
+match". Separately, the lookup `catch` now branches on `err.status`: a
+real 404 still shows "No match"; anything else shows a new `lookup-error`
+state with a "Try again" retry button, distinct from "this book doesn't
+exist."
+
+Verified the checksum logic against real ISBNs (valid ones pass, a
+corrupted digit and a 12-digit UPC both correctly fail) and confirmed via
+the real API that a genuinely-absent-but-checksum-valid ISBN returns a
+real 404 through the same path the frontend now checks for.
+
+## Task 72 — App-wide speed pass, round 2 ✅
+Follow-up to the Prisma relation-join fix from earlier — that one was
+global; this pass audited everything else. Fixed, ranked by real-world
+impact:
+
+**Backend**
+- `schema.prisma`: composite indexes `BookListing(societyId, status)` and
+  `(ownerId, status)` — discovery's home-feed query filters both together
+  on every load, and Postgres was bitmap-AND-ing two single-column indexes
+  instead of one composite scan. Also `Notification(userId, isRead)` (the
+  unread-badge query on every poll/bell-open) and
+  `CreditTransaction(userId, hiddenAt)` (credits history/balance).
+  Migration `20260901064406_add_composite_indexes_for_hot_queries`.
+- `wishlist.service.js#list`: was a real per-row N+1 — up to 2 sequential
+  `findFirst` queries (listing, then request) per wishlisted book, inside
+  a `Promise.all` over the rows. A 20-book wishlist cost ~40 extra round
+  trips. Rewrote as two batched `findMany`s (all listings for all book
+  ids, all matching requests for all listing ids) joined in memory —
+  verified live that `available`/`requested` still compute correctly
+  (tested both the not-yet-requested and requested states on a real
+  wishlisted book).
+- `requests.service.js#accept`: the "decline every competing request"
+  loop did one `bookRequest.update` per row; the status flip is identical
+  for all of them, so that's now one `updateMany` before the loop —
+  credit-release and notification still run per-row (they genuinely need
+  to). Verified the zero-competing-requests path still accepts cleanly.
+- Added Redis caching (`societies.service.js#listSocieties`, 60s;
+  `discovery.service.js#stats`, 30s) — both are reference-ish data hit on
+  every signup/city-picker/home-load but change rarely. Added explicit
+  invalidation on writes (`adminCreateSociety`/`adminUpdateSociety`, and a
+  new `invalidateCache()` called from `admin.service.js#removeSociety`).
+  Measured live: societies list 0.26s → 0.04s cached, discovery stats
+  1.0s → 0.19s cached.
+
+**Frontend**
+- New `lib/cloudinary.js#cldThumb()` — uploads are pre-resized to a fixed
+  1600×1600 webp server-side, so every grid/spine thumbnail across the
+  app was downloading that same full-size image just to shrink it in
+  CSS. Inserts a Cloudinary `w_/q_auto/f_auto` transform for card (240px)
+  and spine (120px) renders in `BookCover.js`; the large detail cover
+  stays full-res. Verified live: the same real listing photo dropped from
+  12.4KB to 5.0KB at a small test size — real uploads (1600px) will see a
+  much bigger cut.
+- `AppDataContext.js#requestedKeys` is now a `Set` instead of an array —
+  `BookGrid.js` called `.includes()` on it once per card, an O(n²) scan
+  over the whole discovery grid on every render. `BookDetailView.js`
+  updated to match (`.has()`).
+- `BookCard.js` wrapped in `React.memo` — `WishlistButton` already
+  subscribes to the wishlist itself via context, so the card only needs
+  to re-render on its own prop changes, not on every unrelated
+  AppDataContext update (credits, exchanges, admin state, ...) that
+  would otherwise re-render every card in a populated grid.
+
+Confirmed the API boots clean with the new Redis dependencies wired into
+`SocietiesService`/`DiscoveryService`, and no console/network errors on
+the pages touched.
+
+## Task 73 — Notifications could race their own transaction commit ✅
+User asked for notifications to arrive faster/more reliably. The socket
+push itself was already near-instant (confirmed earlier this session via
+a direct test) — the real issue was correctness, not speed: every
+notification created inside a `$transaction(async (tx) => ...)` block
+(accept, pickup propose/confirm, handover verify — most of them) fired
+its `notification:new` socket emit *synchronously during* that
+transaction, before Prisma had actually committed it. `AppDataContext`'s
+socket handler reacts to that push by immediately refetching
+(`refreshExchanges()`) — occasionally that refetch could beat the
+transaction's own commit round-trip to Neon and read pre-commit state,
+so a notification could "arrive" before the data it describes was
+actually visible.
+
+**Fix, with zero changes at any of the ~10 call sites**: `prisma.service.js`
+now wraps `$transaction` — when called with a callback (the interactive-
+transaction form), it stashes an empty `tx.__pendingSideEffects` array on
+the transaction client before running the caller's function, then drains
+and fires that array only after `$transaction()` itself resolves (which
+Prisma guarantees is after commit). `notifications.service.js#create`
+now pushes its socket-emit/FCM-push onto `client.__pendingSideEffects`
+when called with a transaction client, instead of firing immediately;
+called standalone (no transaction), it still fires right away as before.
+
+Verified two ways: an isolated test confirmed the queued side effect is
+false mid-transaction and true only after `$transaction()` resolves; a
+real end-to-end pickup-propose flow with a live socket listener showed
+the notification arriving correctly, after commit, still well under two
+seconds including Neon round trips.
+
+## Task 74 — Screens needed a manual reload to show new data ✅
+User reported having to reload the whole webapp to see new data. Traced
+two distinct, independent causes:
+
+1. **My Shelf / Wishlist / Credits / Exchange pages never refetched on
+   their own mount at all** — `books`/`wishlist`/`credits`/`exchanges`
+   only ever loaded once, in `AppDataContext`'s initial session-load
+   effect, plus whatever the current user's own action-triggered
+   mutations updated. Navigating to one of these screens ran no fetch of
+   its own (confirmed: `grep useEffect` on all four page files returned
+   nothing) — unlike `home/page.js`, which already re-runs `searchBooks`
+   on every mount. Added the same `useEffect(() => { refreshX() }, [refreshX])`
+   pattern to `books/page.js`, `wishlist/page.js`, `credits/page.js`, and
+   `ExchangeList.js`.
+2. **Next.js 16's client router cache was masking cause 1's fix.**
+   Verified live with `performance.getEntriesByType('resource')`: even
+   after adding the mount-effect above, clicking away and back to a
+   screen within its 5-minute default `static` stale window fired *zero*
+   new network requests — the client component wasn't remounting at all,
+   just being shown from cache, so the new effect never got the chance to
+   run. Set `experimental.staleTimes: { dynamic: 0, static: 30 }` in
+   `next.config.mjs` (30 is the minimum Next.js accepts for `static`,
+   confirmed via a config-validation error at the wrong value of 0) — a
+   full 0 wasn't achievable, but this cuts the effective staleness window
+   from 5 minutes to 30 seconds.
+3. **Bonus, same underlying complaint**: `AppDataContext`'s socket
+   `onLiveUpdate` handler and the 45s poll only ever refreshed
+   `exchanges`/notifications — extended both to also refresh
+   `books`/`wishlist`/`credits`, since almost any notification (a new
+   request, a returned book, a handover credit) plausibly changes one of
+   them, and this covers the screen the user is *already sitting on*
+   without needing any navigation at all.
+
+Verified live end-to-end via direct API calls run alongside the open
+browser tab (no manual interaction with the tab beyond navigating): a
+book listed while the user was elsewhere in the app appeared in My Shelf
+on the next visit; a request accepted via a separate call flipped the
+listing's status from Available to Requested on revisit; confirmed via
+`performance.getEntriesByType` that a fresh `/listings/mine` request
+genuinely fires again on revisit now instead of being served from the
+router cache.
+
+## Task 75 — Cancellation reasons: role-specific lists, required not optional, shown in the bell dropdown too ✅
+User reported the cancel-exchange reason list showed the exact same
+options to both the book owner and the requester, even though several
+options only make sense from one side ("Book no longer available" from
+a requester, "Found it elsewhere" from an owner). Also: the reason
+wasn't showing in the bell-icon notification dropdown (only the full
+`/notifications` page had gotten the body-text fix from Task 68).
+
+Discussed the actual reason wording with the user before touching code
+(per their explicit ask). Settled on:
+- Owner (`role: 'giver'`): Book no longer available / Unable to contact
+  the requester / Timing issue — can't do the pickup / Changed my mind.
+- Requester (`role: 'receiver'`): No longer need the book / Found it
+  elsewhere / Unable to contact the owner / Pickup location too far or
+  inconvenient / Timing issue — can't do the pickup / Request made by
+  mistake.
+
+**Fix**: `CancelReasonForm.js`'s single `CANCEL_REASONS` array became
+`CANCEL_REASONS_BY_ROLE` keyed by the exchange DTO's own `role` field
+(`'giver'`/`'receiver'`, from `exchanges.service.js#_otherParty`) — both
+call sites (`ExchangeDetailView.js`, `PickupScheduler.js`) now pass
+`role={exchange.role}` through. Also made a reason mandatory rather than
+optional: the "Cancel exchange" button is `disabled` until one is
+selected, and the "(optional)" wording was dropped from the prompt.
+`NotifDropdown.js` gained the same `{n.body && (...)}` block
+`notifications/page.js` already had, from Task 68.
+
+Verified live end-to-end: cancelled a real accepted exchange as the
+owner — confirmed only the 4 owner-specific reasons showed, the submit
+button was disabled with none picked and enabled once one was, and the
+resulting notification (both via the API and rendered in the real bell
+dropdown, logged in as the other party) correctly showed
+`"...was cancelled — Book no longer available."`.
+
+## Task 76 — Admin manual credit corrections were completely silent ✅
+User gave a user extra credit from the admin panel — no notification
+reached them, and the new balance only ever showed up after a page
+reload. Root cause: `admin.service.js#correctCredit` (via
+`credits.tx.js#adminAdjustCredit`) only ever updated the `creditAccount`
+row and logged a `CreditTransaction` — no notification was ever created
+for this path, unlike every other credit-changing action (handover,
+cancellation). With nothing to push live, the balance only caught up via
+the 45s poll or a manual reload, and the user had no idea why their
+balance had changed at all.
+
+**Fix**: `correctCredit` now creates an `ADMIN`-type notification inside
+the same transaction as the balance update (so it's covered by Task 73's
+commit-race fix too) — `"Credit added to your account" / "+4 credits —
+<reason>"` for a positive correction, `"Credit adjusted"` for a
+deduction, always showing the admin's actual reason text.
+
+Verified live end-to-end: ran a real correction with a socket listener
+open — the notification arrived instantly with the correct body text,
+and separately, with a real browser tab already sitting on the home
+screen (no navigation, no reload), the header's credit count updated
+from 6 to 8 within about 2 seconds of a second correction.
+
+## Task 77 — Audited every admin-panel action for the same silent-notification gap ✅
+User asked for every admin-panel action affecting a member to notify
+them live, same as the credit-correction fix. Read through the whole of
+`admin.service.js` and `reports.service.js` and checked each method that
+writes to a specific member's data for a matching `notifications.create`
+call. Most already had one (verification, suspension, deletion-request
+rejection, location-request approval/rejection, support-ticket
+resolution) — two genuine gaps found:
+
+1. `admin.service.js#removeListing` — force-removing a member's listing
+   never told the owner; it just vanished from their shelf. Now creates
+   an `ADMIN` notification (`"Your listing was removed" / "<title> was
+   removed by an admin."`) right after the status update.
+2. `reports.service.js#adminResolve` — resolving a report only ever
+   notified the *reporter* ("Your report was reviewed"); the *reported*
+   user (`report.reportedUserId`, when set) never learned a report
+   against them had been closed out. Added a second, deliberately
+   neutral notification to them (`"A report involving your account was
+   reviewed" / "Our trust & safety team has finished reviewing it."`) —
+   neutral because resolving a report doesn't imply it was upheld.
+
+`actionDeletionRequest` (account soft-delete) was confirmed to
+deliberately skip a notification — the account is deactivated in the
+same action, so there's no one left signed in to see it; not a gap.
+
+Verified both live: force-removed a real listing as admin and confirmed
+the owner got the exact notification text; filed a real report with a
+`reportedUserId` set, resolved it as admin, and confirmed both the
+reporter and the reported user received their respective notifications.
+
+## Task 78 — Wider desktop/tablet frame, matching cream letterbox instead of a different grey background ✅
+User shared a different app's screenshot purely as a layout reference
+(confirmed with them before touching anything) — not asking to copy its
+design, just: a bit more width on desktop/tablet, and the leftover
+side space in the same cream theme instead of visibly different. Mobile
+untouched.
+
+`globals.css#.app-frame` was letterboxed at `max-width:480px` — any
+viewport wider than that showed a dotted grey (`--bg-outer`) background
+on both sides, a deliberately different colour from the frame's own
+cream. Bumped the frame to `600px` and changed `body`'s background to
+plain `var(--cream)` (dropped the dot-pattern radial-gradient entirely).
+Real phone viewports are already under 480px, so this constraint never
+engaged for them either way — mobile is unaffected by construction, not
+by a media query. Also bumped the three other `max-width:480px`
+overlays (`.thread-overlay`, `.notif-dropdown`, `.sheet-overlay`) and the
+PWA banner's `min(480px,100vw)` to `600px` to match, so a dropdown/sheet
+doesn't look narrower than the page it's opened on top of.
+
+Verified live at 1440px (desktop) and 768px (tablet): frame width reads
+600px via `getBoundingClientRect`, and `body`'s computed background
+exactly equals the frame's own (`rgb(244,240,230)` both) — no visible
+seam. At 375px (mobile) the frame still measures the full viewport
+width, confirming zero change there.
+
+## Task 79 — Follow-up: 600 -> 800px, and 3-column book grid at >=500px viewports ✅
+Same session as Task 78. User asked for the app frame a bit wider still
+(`.app-frame` and the three matching overlays/banner all bumped 600 ->
+800px) and for the home page's `.book-grid` to show 3 columns instead of
+2 once the viewport reaches 500px, mobile untouched.
+
+Added `@media(min-width:500px){.book-grid{grid-template-columns:1fr 1fr 1fr}}`
+right after the existing 2-column base rule — `.book-grid` is only used
+by `BookGrid.js` (checked, no other consumer), so this is scoped to
+exactly the intended grid.
+
+Verified live at the exact boundary: 499px viewport computes 2 columns,
+500px computes 3 (via `getComputedStyle(...).gridTemplateColumns` on a
+synthetic `.book-grid` element, since the real grid unmounts entirely
+when there's nothing to show — `BookGrid.js` renders an `EmptyState`
+instead). 375px (mobile) still computes 2, confirming no regression
+there. Frame width re-confirmed at 800px at 1440px viewport.
+
+## Task 80 — Follow-up: 3-column breakpoint moved 500 -> 600px ✅
+User asked to move Task 79's breakpoint. Changed
+`@media(min-width:500px)` to `@media(min-width:600px)` on `.book-grid`.
+Verified at the exact boundary again: 599px computes 2 columns, 600px
+computes 3.
+
+## Task 81 — "List a book" FAB landed inside the grid content on wide screens ✅
+User caught this from a real screenshot: the floating "+" button sat
+overlapping the third row of book cards instead of anchored to the
+frame's corner. `.fab`'s `right` offset used a hand-rolled letterbox
+formula — `right:calc(16px + max(0px, (100vw - 480px) / 2))` — to stay
+aligned with `.app-frame`'s right edge despite being `position:fixed`
+(relative to the whole viewport, not the frame). Task 79 widened the
+frame to 800px but missed updating this one hardcoded `480px` companion
+value, so on any viewport wider than 480px the FAB's calculated offset
+no longer matched the frame's actual (now wider) edge. Fixed the magic
+number to `800px`. Checked the rest of `globals.css` for the same
+pattern — only `.fab` had it (`.toast` centers via
+`left:50%;transform:translateX(-50%)`, `.bottomnav` is `position:sticky`
+inside the frame's own flex column — neither needed a viewport-width
+formula in the first place).
+
+Verified live: at 1440px, frame's right edge minus the FAB's right edge
+is exactly 16px (was landing well inside the grid before); re-confirmed
+the same exact 16px at 375px (mobile), unaffected either way.
+
+## Task 82 — Set up real Firebase push notifications end-to-end, fix two real bugs, add iOS/Android compatibility ✅
+The Firebase push code (`firebase-admin.service.js`, `lib/firebase.js`,
+`UserDevice` storage) already existed from earlier work but had never
+been exercised against a real Firebase project — this was the first live
+test. Walked the user through creating the `kitabx-478fe` Firebase
+project (their console had a redesigned "unified campaigns" UI that no
+longer exposes the classic Project Settings → Cloud Messaging tab the
+docs describe; landed on the `/settings/cloudmessaging` direct URL /
+"DevOps & Engagement" → Messaging product instead), added the real
+Admin SDK credentials to `apps/api/.env` and the Web SDK config to
+`apps/web/.env.local` (both gitignored, confirmed via `git check-ignore`
+before writing anything) — VAPID key intentionally left blank per
+Firebase's own documented default-key fallback.
+
+**Two real bugs found and fixed via live debugging** (temporary
+`console.log`s added and removed once root-caused):
+1. `getToken()` was trying to auto-register Firebase's own default
+   `/firebase-messaging-sw.js`, a file this app doesn't have — push is
+   already handled by the app's own unified `sw.js`. Fixed by passing
+   `serviceWorkerRegistration` explicitly, sourced from the non-blocking
+   `navigator.serviceWorker.getRegistration()` (not `.ready`, which would
+   hang forever in local dev — `ServiceWorkerRegistrar.js` deliberately
+   skips registering `sw.js` outside production so HMR isn't intercepted
+   by a cached shell; confirmed there's genuinely no SW to attach to
+   there, by design, not a bug).
+2. The success path called `notificationsService.registerPushToken(token)`,
+   a function that doesn't exist — the real export is
+   `registerDevice(fcmToken, platform)`. Fixed the call site and call
+   signature (`registerDevice(token, 'web')`).
+
+**Verified fully live**, including a local production build
+(`npm run build && npm run start`, since the SW fix above is a no-op in
+dev by design) run temporarily on port 3000 with the user's own dev
+server paused (confirmed with them first, restored after): a real
+device row landed in `UserDevice` with a genuine FCM token; an admin
+credit correction's notification showed `NotificationDelivery.status:
+'sent'`; and with the tab backgrounded, a real native OS push
+notification appeared (confirmed by the user directly). Foreground-tab
+delivery is silently absorbed by Firebase's `onMessage()` (no handler
+registered for it here) rather than showing anything — noted as a
+known, non-broken gap, not fixed since not asked for.
+
+**iOS/Android compatibility** (user explicitly asked for this): audited
+the existing manifest/install-prompt/service-worker/backend-payload code
+for both platforms. Android and desktop needed nothing — manifest icons,
+`sw.js`'s payload-shape defensiveness, and the SW's own hardcoded
+icon/badge on `showNotification()` were already correct. iOS Safari's
+real constraint (web push only works at all once the site is installed
+to the Home Screen, iOS 16.4+) had no user-facing handling: a
+non-installed iOS visitor tapping "Enable" got a bare, unexplained
+"Push permission denied" toast, since `'Notification' in window` is
+`false` in a non-standalone iOS Safari tab. Extracted the
+`isIos`/`standalone` detection already living in `InstallPrompt.js` into
+a shared `lib/platform.js` (`isIosDevice()`, `isStandalone()`) and gated
+`notifications/page.js#enablePush()` on it — iOS-not-installed now shows
+"Install KitabX to your Home Screen first to enable notifications on
+iPhone/iPad" instead of attempting and failing silently. Also added a
+matching one-line mention to `InstallPrompt.js`'s existing iOS
+Share-sheet copy. Verified both branches live by monkey-patching
+`navigator.userAgent`/`navigator.standalone` in a real browser session:
+iOS + not-standalone shows the new install-first toast without ever
+calling `requestPushPermission()`; iOS + standalone skips straight to
+the real permission flow as before.
+
+Per the user's explicit instruction, none of this touched the deployed
+Render/Vercel environment — every credential and fix stayed local until
+they separately ask to push it.

@@ -10,6 +10,8 @@ import EmptyState from '@/components/ui/EmptyState';
 import WishlistButton from '@/components/wishlist/WishlistButton';
 import { StarDisplay } from '@/components/ratings/StarRating';
 import { BookCover, BookCoverDetail } from './BookCover';
+import Lightbox from '@/components/ui/Lightbox';
+import ImageMagnifier from '@/components/ui/ImageMagnifier';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useAppSheets } from '@/hooks/useAppSheets';
 import { useToast } from '@/components/ui/ToastProvider';
@@ -23,13 +25,19 @@ export default function BookDetailView({ bookKey }) {
   const router = useRouter();
   const showToast = useToast();
   const {
-    books, requestedKeys, getOwnerProfile, ensureBookDetail,
+    books, requestedKeys, getOwnerProfile, ensureBookDetail, credits,
     requestBook, cancelBookRequest, togglePauseListing, removeListing,
   } = useAppData();
   const { trustProfile, reportListing } = useAppSheets();
 
   const book = books[bookKey];
   const [owner, setOwner] = useState(null);
+  const [zoomSrc, setZoomSrc] = useState('');
+  const [selectedKeys, setSelectedKeys] = useState([]);
+  const [batchRequesting, setBatchRequesting] = useState(false);
+  const [otherListingsOpen, setOtherListingsOpen] = useState(false);
+
+  useEffect(() => { setSelectedKeys([]); }, [bookKey]);
 
   // Whatever's cached for this key (from a discovery/my-books list) renders
   // immediately, but is never the complete record — this always fetches the
@@ -85,19 +93,80 @@ export default function BookDetailView({ bookKey }) {
   // I actually own should get the owner-management controls.
   const canManage = mine && book.status !== 'Given away' && book.status !== 'Received';
   const requested = requestedKeys.has(bookKey);
-
-  const onRequest = async () => {
-    const result = await requestBook(bookKey);
-    if (!result.ok) {
-      return showToast(
-        result.reason === 'no-credit'
-          ? 'You need at least 1 available credit to request a book'
-          : (result.message || 'This book is no longer available'),
+  // Whatever's already loaded into the shared cache from this owner (Discover,
+  // search, ...) — same source `sellerListings` (useAppSheets) already reads,
+  // just rendered inline here instead of behind an extra sheet. Books that are
+  // genuinely un-requestable (paused, already given away/received) are left
+  // out entirely rather than shown greyed-out — only "already requested"
+  // stays visible, since that's still useful context.
+  const otherListings = mine ? [] : Object.values(books).filter((b) => (
+    b.ownerId === book.ownerId && b.key !== book.key
+    && !b.paused && b.status !== 'Given away' && b.status !== 'Received'
+  ));
+  // Selecting is capped at the current available-credit balance — each
+  // selected book still reserves its own credit one at a time exactly like
+  // a single request (see requestKeys below), so trying to select more than
+  // you can actually afford is stopped up front instead of silently only
+  // partly going through after the fact.
+  //
+  // While the book this whole page is about is still requestable, it's
+  // folded into the same one combined "Request N books" action as these
+  // checkboxes (see onRequestAll) rather than being a separate button with
+  // its own separate credit — so it still needs its own slot reserved out of
+  // the same budget these checkboxes are capped against.
+  const mainBookNeedsCreditSlot = !mine && !requested;
+  const otherBooksCreditCap = Math.max(0, credits.available - (mainBookNeedsCreditSlot ? 1 : 0));
+  const toggleSelected = (key) => {
+    const isSelected = selectedKeys.includes(key);
+    if (!isSelected && selectedKeys.length >= otherBooksCreditCap) {
+      showToast(
+        otherBooksCreditCap > 0
+          ? `You can only select ${otherBooksCreditCap} book${otherBooksCreditCap === 1 ? '' : 's'} at a time with your current credits`
+          : mainBookNeedsCreditSlot
+            ? 'Your only credit is reserved for the book on this page'
+            : "You don't have any credits available right now",
       );
+      return;
     }
-    showToast("Request sent — you'll be notified when it's accepted 🤝");
-    router.push('/exchanges?tab=mine');
+    setSelectedKeys((s) => (isSelected ? s.filter((k) => k !== key) : [...s, key]));
   };
+
+  // The single source of truth for sending requests, whether it's just the
+  // book on this page, just the ticked "More from" ones, or both together —
+  // one call per key, same server-side credit check every time (§19), so
+  // there's exactly one code path and no way for a "batch" click to silently
+  // only cover part of what was actually selected.
+  const requestKeys = async (keys) => {
+    if (!keys.length) return;
+    setBatchRequesting(true);
+    let sent = 0;
+    let noCredit = false;
+    for (const key of keys) {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await requestBook(key);
+      if (result.ok) sent += 1;
+      else if (result.reason === 'no-credit') noCredit = true;
+    }
+    setBatchRequesting(false);
+    setSelectedKeys([]);
+    if (sent && noCredit) {
+      showToast(`${sent} request${sent === 1 ? '' : 's'} sent — ran out of credits for the rest`);
+    } else if (sent) {
+      showToast(sent === 1 ? "Request sent — you'll be notified when it's accepted 🤝" : `${sent} requests sent — you'll be notified as each is accepted 🤝`);
+    } else if (noCredit) {
+      showToast('You need at least 1 available credit to request a book');
+    } else {
+      showToast('Could not send those requests — try again');
+    }
+    if (sent) router.push('/exchanges?tab=mine');
+  };
+
+  // While the book on this page can still be requested, it and the ticked
+  // "More from" books are one combined action (see the sticky button below)
+  // — no separate "did I actually submit the others too" second click.
+  // Once it's already requested (or it's your own listing), there's nothing
+  // left to fold it into, so the checkboxes get their own button instead.
+  const onRequestAll = () => requestKeys(mainBookNeedsCreditSlot ? [bookKey, ...selectedKeys] : selectedKeys);
 
   // Chat is switched off for now (see chat.module.js) — this used to open a
   // conversation with the owner from here. There's no "accepted" gate
@@ -128,7 +197,18 @@ export default function BookDetailView({ bookKey }) {
 
       <div className="app-scroll pad-nav" style={{ padding: '16px 16px 0' }}>
         <div style={{ display: 'flex', gap: 18, marginBottom: 22, position: 'relative' }}>
-          <BookCoverDetail book={book} style={{ width: 150, aspectRatio: 0.72, flexShrink: 0 }} />
+          <button
+            type="button"
+            style={{ width: 150, aspectRatio: 0.72, flexShrink: 0, padding: 0, border: 'none', background: 'none' }}
+            onClick={() => book.photos?.[0] && setZoomSrc(book.photos[0])}
+            aria-label={book.photos?.[0] ? 'View cover full size' : undefined}
+          >
+            {book.photos?.[0] ? (
+              <ImageMagnifier src={book.photos[0]} alt={`${book.title} cover`} style={{ borderRadius: 12, overflow: 'hidden' }} />
+            ) : (
+              <BookCoverDetail book={book} style={{ width: 150, aspectRatio: 0.72, flexShrink: 0 }} />
+            )}
+          </button>
           {!mine && (
             <WishlistButton
               bookId={book.bookId}
@@ -228,6 +308,96 @@ export default function BookDetailView({ bookKey }) {
           <Icon name="chevronRight" style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
         </button>
 
+        {mine && (
+          <div style={{ margin: '20px 0 0' }}>
+            <div className="section-row" style={{ padding: '0 0 10px' }}>
+              <SectionTitle size={14}>Your uploaded photos</SectionTitle>
+            </div>
+            <ConditionPhotoGallery key={book.key} book={book} onZoom={setZoomSrc} />
+          </div>
+        )}
+
+        {otherListings.length > 0 && (
+          <div style={{ margin: '14px 0 0' }}>
+            <button
+              type="button"
+              onClick={() => setOtherListingsOpen((o) => !o)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+                padding: '0 0 10px', border: 'none', background: 'none', textAlign: 'left',
+              }}
+              aria-expanded={otherListingsOpen}
+            >
+              <SectionTitle size={14}>
+                More from {book.ownerName} ({otherListings.length})
+                {!otherListingsOpen && selectedKeys.length > 0 && ` — ${selectedKeys.length} selected`}
+              </SectionTitle>
+              <Icon
+                name="chevronDown"
+                style={{ width: 16, height: 16, color: 'var(--text-muted)', flexShrink: 0, transform: otherListingsOpen ? 'rotate(180deg)' : 'none' }}
+              />
+            </button>
+            {otherListingsOpen && (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '-6px 0 10px' }}>
+                  {mainBookNeedsCreditSlot
+                    ? 'Tick to add these to your request below'
+                    : 'Tick the books you want — request them all at once'}
+                </div>
+                {otherListings.map((b) => {
+                  const alreadyRequested = requestedKeys.has(b.key);
+                  const checked = selectedKeys.includes(b.key);
+                  return (
+                    <div
+                      key={b.key}
+                      className="card"
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, marginBottom: 10, opacity: alreadyRequested ? 0.6 : 1 }}
+                    >
+                      <input
+                        type="checkbox"
+                        style={{ width: 17, height: 17, flexShrink: 0, accentColor: 'var(--brand-2)' }}
+                        checked={checked}
+                        disabled={alreadyRequested}
+                        onChange={() => toggleSelected(b.key)}
+                        aria-label={`Select ${b.title} to request`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/books/${b.key}`)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0,
+                          border: 'none', background: 'none', textAlign: 'left', padding: 0,
+                        }}
+                      >
+                        <BookCover book={b} style={{ width: 40, aspectRatio: '2/3', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <b style={{ fontSize: 13, display: 'block' }}>{b.title}</b>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{b.author}</div>
+                        </div>
+                      </button>
+                      {alreadyRequested && (
+                        <span className="status-pill st-given" style={{ flexShrink: 0 }}>Requested</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* When the book on this page is still requestable, its checkbox-less
+                    request is already folded into these selections — see the one
+                    combined button in the sticky bar below instead of a second one
+                    here. Only once it's no longer part of that (already requested,
+                    or this is your own listing) do these need their own button. */}
+                {!mainBookNeedsCreditSlot && selectedKeys.length > 0 && (
+                  <button className="btn btn-primary" style={{ marginTop: 4 }} disabled={batchRequesting} onClick={() => requestKeys(selectedKeys)}>
+                    {batchRequesting
+                      ? 'Sending…'
+                      : `🤝 Request ${selectedKeys.length} selected book${selectedKeys.length === 1 ? '' : 's'}`}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         <div
           style={{
             display: 'flex', alignItems: 'center', gap: 12, padding: '14px 4px 22px',
@@ -290,10 +460,12 @@ export default function BookDetailView({ bookKey }) {
             <div className="section-row" style={{ padding: '0 0 10px' }}>
               <SectionTitle size={14}>Condition photo — lender&apos;s actual copy</SectionTitle>
             </div>
-            <ConditionPhotoGallery key={book.key} book={book} />
+            <ConditionPhotoGallery key={book.key} book={book} onZoom={setZoomSrc} />
           </div>
         )}
       </div>
+
+      <Lightbox src={zoomSrc} onClose={() => setZoomSrc('')} />
 
       {/* No action bar at all for a book already given away or received —
           the exchange is done, there's nothing left to manage or request. */}
@@ -327,8 +499,16 @@ export default function BookDetailView({ bookKey }) {
             </>
           ) : (
             <>
-              {/* Message button on hold along with onMessage above — see the note there. */}
-              <button className="btn btn-primary" onClick={onRequest}>🤝 Request this book</button>
+              {/* Message button on hold along with onMessage above — see the note there.
+                  This one button covers the book on this page plus whatever's ticked in
+                  "More from" above — see onRequestAll and mainBookNeedsCreditSlot. */}
+              <button className="btn btn-primary" disabled={batchRequesting} onClick={onRequestAll}>
+                {batchRequesting
+                  ? 'Sending…'
+                  : selectedKeys.length
+                    ? `🤝 Request ${1 + selectedKeys.length} books`
+                    : '🤝 Request this book'}
+              </button>
             </>
           )}
         </div>
@@ -343,7 +523,7 @@ export default function BookDetailView({ bookKey }) {
  * with prev/next arrows and dots. Falls back to the cover itself, or the
  * generated placeholder, when there's nothing else to page through.
  */
-function ConditionPhotoGallery({ book }) {
+function ConditionPhotoGallery({ book, onZoom }) {
   const gallery = (book.photos || []).slice(1);
   const [index, setIndex] = useState(0);
 
@@ -351,20 +531,37 @@ function ConditionPhotoGallery({ book }) {
   const activeUrl = hasGallery ? gallery[index] : book.photos?.[0];
   const dotCount = hasGallery ? gallery.length : 1;
 
+  // A real uploaded photo is shown exactly as uploaded — no added card
+  // background, no white frame, no rotation. Capped at maxHeight rather than
+  // stretched to the full card width — a tall portrait photo otherwise ends
+  // up taller than the screen — with width following automatically from that,
+  // so the photo still scales down whole (nothing cropped off any edge) and
+  // just ends up narrower instead of spilling past a fixed height. The
+  // stylised gradient card is only ever a placeholder for when there's no
+  // real photo to show.
   return (
     <div>
-      <div className="condition-photo">
-        <span className="cp-leaf">🌿</span>
+      <div style={{ position: 'relative' }}>
         {activeUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={activeUrl}
-            src={activeUrl}
-            alt={`${book.title} — actual condition`}
-            style={{ width: '44%', aspectRatio: 0.7, transform: 'rotate(-3deg)', objectFit: 'cover', borderRadius: 8 }}
-          />
+          <button
+            type="button"
+            onClick={() => onZoom(activeUrl)}
+            aria-label="View photo full size"
+            style={{ display: 'flex', justifyContent: 'center', width: '100%', padding: 0, border: 'none', background: 'none' }}
+          >
+            <ImageMagnifier
+              key={activeUrl}
+              src={activeUrl}
+              alt={`${book.title} — actual condition`}
+              maxHeight={380}
+              imgStyle={{ borderRadius: 12 }}
+            />
+          </button>
         ) : (
-          <BookCover book={book} style={{ width: '44%', aspectRatio: 0.7, transform: 'rotate(-3deg)' }} />
+          <div className="condition-photo">
+            <span className="cp-leaf">🌿</span>
+            <BookCover book={book} style={{ width: '44%', aspectRatio: 0.7, transform: 'rotate(-3deg)' }} />
+          </div>
         )}
         {gallery.length > 1 && (
           <>

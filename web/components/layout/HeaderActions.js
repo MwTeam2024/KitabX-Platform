@@ -50,7 +50,7 @@ export default function HeaderActions({ avatarHref = '/profile', compact = false
           // eslint-disable-next-line @next/next/no-img-element
           <img src={user.profileImageUrl} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          user?.initials || 'PS'
+          user?.initials || ''
         )}
       </Link>
     </div>

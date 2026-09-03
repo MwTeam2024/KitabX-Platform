@@ -7,10 +7,12 @@ import NoteBox from '@/components/ui/NoteBox';
 import UploadBox from '@/components/ui/UploadBox';
 import EmptyState from '@/components/ui/EmptyState';
 import { BookCover } from '@/components/books/BookCover';
+import Lightbox from '@/components/ui/Lightbox';
 import { coverForDraft } from '@/contexts/BookDraftContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/components/ui/ToastProvider';
 import { booksService } from '@/services/books.service';
+import { uploadsService } from '@/services/uploads.service';
 
 const SCAN_STEPS = ['Reading your photo…', 'Detecting book covers…', 'Matching titles and authors…'];
 const MIN_SCAN_MS = 1300;
@@ -28,6 +30,7 @@ function toDetectedItem(candidate, i) {
     year: candidate.publicationYear ? String(candidate.publicationYear) : (candidate.year || ''),
     confidence: candidate.unmatched ? 'low' : (candidate.confidence || 'low'),
     unmatched: !!candidate.unmatched,
+    coverImageUrl: candidate.coverImageUrl || '',
     ...coverForDraft({ title, author, genre }),
   };
 }
@@ -47,6 +50,8 @@ export default function BulkUploadPage() {
   const [detected, setDetected] = useState([]);
   const [selected, setSelected] = useState([]);
   const [publishing, setPublishing] = useState(false);
+  const [bundlePhotoUrl, setBundlePhotoUrl] = useState('');
+  const [zoomSrc, setZoomSrc] = useState('');
   const timers = useRef([]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -65,9 +70,18 @@ export default function BulkUploadPage() {
     const body = new FormData();
     body.append('image', file);
     const minDelay = new Promise((resolve) => timers.current.push(setTimeout(resolve, MIN_SCAN_MS)));
+    setBundlePhotoUrl('');
 
     try {
-      const [{ candidates }] = await Promise.all([booksService.extractFromImage(body), minDelay]);
+      // Uploaded once here and reused as a shared secondary photo on every
+      // listing published from this batch — the bundle shot is evidence the
+      // books in it exist together, not a per-book cover.
+      const [{ candidates }, bundleUpload] = await Promise.all([
+        booksService.extractFromImage(body),
+        uploadsService.uploadListingPhoto(file).catch(() => null),
+        minDelay,
+      ]);
+      if (bundleUpload?.url) setBundlePhotoUrl(bundleUpload.url);
       const items = (candidates || []).filter((c) => c?.title).map(toDetectedItem);
       if (!items.length) {
         setDetected([]);
@@ -104,7 +118,7 @@ export default function BulkUploadPage() {
           isbn: d.isbn,
           year: d.year,
           pickup: '',
-          photos: [],
+          photos: [d.coverImageUrl, bundlePhotoUrl].filter(Boolean),
         });
         published += 1;
       } catch {
@@ -191,10 +205,18 @@ export default function BulkUploadPage() {
                 return (
                   <label className={`bulk-item${on ? '' : ' off'}`} key={d.id}>
                     <input type="checkbox" className="bulk-check" checked={on} onChange={() => toggle(d.id)} />
-                    <BookCover
-                      book={{ ...d, title: '' }}
-                      style={{ width: 42, aspectRatio: '2/3', flexShrink: 0 }}
-                    />
+                    <button
+                      type="button"
+                      style={{ width: 42, flexShrink: 0, padding: 0, border: 'none', background: 'none' }}
+                      onClick={(e) => { if (d.coverImageUrl) { e.preventDefault(); setZoomSrc(d.coverImageUrl); } }}
+                      aria-label={d.coverImageUrl ? 'View cover full size' : undefined}
+                    >
+                      <BookCover
+                        book={{ ...d, title: '' }}
+                        photoUrl={d.coverImageUrl}
+                        style={{ width: 42, aspectRatio: '2/3', flexShrink: 0 }}
+                      />
+                    </button>
                     <div className="bulk-item-info">
                       <b>{d.title}</b>
                       <span>{d.unmatched ? 'Could not verify — check details' : `${d.author} · ${d.genre}`}</span>
@@ -206,9 +228,32 @@ export default function BulkUploadPage() {
                 );
               })}
             </div>
+
+            {bundlePhotoUrl && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+                  Your photo — attached to every book below as proof of the set
+                </div>
+                <button
+                  type="button"
+                  style={{ padding: 0, border: 'none', background: 'none', width: 90 }}
+                  onClick={() => setZoomSrc(bundlePhotoUrl)}
+                  aria-label="View your uploaded photo full size"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={bundlePhotoUrl}
+                    alt=""
+                    style={{ width: 90, aspectRatio: '1', objectFit: 'cover', borderRadius: 10 }}
+                  />
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      <Lightbox src={zoomSrc} onClose={() => setZoomSrc('')} />
 
       {phase === 'review' && (
         <div className="sticky-cta">

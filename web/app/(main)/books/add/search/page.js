@@ -39,6 +39,7 @@ export default function SearchBookPage() {
       author: book.author,
       isbn: book.isbn13 || book.isbn10 || '',
       year: book.publicationYear ? String(book.publicationYear) : '',
+      photos: book.coverImageUrl ? [book.coverImageUrl] : [],
     });
     router.push('/books/add/details');
   };
@@ -81,6 +82,7 @@ export default function SearchBookPage() {
           >
             <BookCover
               book={{ ...coverForDraft({ title: b.title, author: b.author, genre: '' }), title: '' }}
+              photoUrl={b.coverImageUrl}
               style={{ width: 40, aspectRatio: '2/3', flexShrink: 0 }}
             />
             <div>

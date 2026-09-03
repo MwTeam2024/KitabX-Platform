@@ -108,6 +108,11 @@ export default function ScanIsbnPage() {
       genre: match.genre || 'Fiction',
       isbn: match.isbn13 || match.isbn10 || '',
       year: match.publicationYear ? String(match.publicationYear) : '',
+      // Google Books' own cover — real photos of the actual copy can still
+      // be added/swapped in on the details step (PhotoUploader), this just
+      // means the user isn't stuck looking at a generated placeholder for a
+      // book we already positively identified.
+      photos: match.coverImageUrl ? [match.coverImageUrl] : [],
     });
     router.push('/books/add/details');
   };
@@ -190,6 +195,7 @@ export default function ScanIsbnPage() {
             <div className="card" style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
               <BookCover
                 book={{ ...match, ...coverForDraft({ title: match.title, author: match.author, genre: match.genre }) }}
+                photoUrl={match.coverImageUrl}
                 style={{ width: 60, aspectRatio: '2/3', flexShrink: 0 }}
               />
               <div>

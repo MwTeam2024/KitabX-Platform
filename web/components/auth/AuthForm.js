@@ -36,7 +36,17 @@ const isEmailInput = (value) => value.includes('@');
 export default function AuthForm({ initialTab = 'signup' }) {
   const router = useRouter();
   const showToast = useToast();
-  const { signupDraft, updateSignupDraft, setSession } = useAuth();
+  const { signupDraft, updateSignupDraft, setSession, isAuthenticated } = useAuth();
+
+  // SessionGate already blocks rendering anything until the /auth/me check
+  // resolves, so if a valid session cookie exists, isAuthenticated is true
+  // by the time this ever mounts — the form itself never checked that and
+  // would sit there rendered on top of an already-logged-in session, so any
+  // link off this page (the header logo included) landed straight in that
+  // account with no login step actually happening on this visit.
+  useEffect(() => {
+    if (isAuthenticated) router.replace('/home');
+  }, [isAuthenticated, router]);
 
   const [tab, setTab] = useState(initialTab);
   const [sending, setSending] = useState(false);
@@ -220,6 +230,10 @@ export default function AuthForm({ initialTab = 'signup' }) {
   const handleSocialError = (err) => showToast(err.message || 'Could not start sign-in');
 
   const heading = HEADINGS[tab];
+
+  // Redirecting away (see the effect above) — don't flash the signup/signin
+  // form for the moment it takes that navigation to land.
+  if (isAuthenticated) return null;
 
   return (
     <>
