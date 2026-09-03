@@ -64,6 +64,13 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
   // race on the same container.
   if (container.dataset.googleButtonRendered) return;
   container.dataset.googleButtonRendered = '1';
+  // Hidden until the fit below settles — Google's button doesn't arrive at
+  // its final natural size in one shot (an icon-only pass, then the real
+  // label), so measuring too early scales against a too-small natural size
+  // and produces an oversized button that then visibly snaps down once a
+  // later pass corrects it. Staying hidden until sizing has settled means
+  // the visitor only ever sees the final, correctly-scaled result.
+  container.style.visibility = 'hidden';
   try {
     await loadScript();
     window.google.accounts.id.initialize({
@@ -121,16 +128,34 @@ export async function renderGoogleButton(container, clientId, onCredential, onEr
       rendered.style.transformOrigin = 'center';
     };
 
-    applyFit();
+    // Debounced: only actually run applyFit (and reveal the container) once
+    // 200ms have passed with no further DOM changes, instead of reacting to
+    // every intermediate pass Google makes while it's still settling.
+    let settleTimer = null;
+    const scheduleApplyFit = () => {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        applyFit();
+        container.style.visibility = 'visible';
+      }, 200);
+    };
+
+    scheduleApplyFit();
     // childList/subtree only (not `attributes`) — our own applyFit() writes
     // are attribute (style) changes, so watching those too would make the
     // observer re-trigger itself on every write it just made.
-    const observer = new MutationObserver(applyFit);
+    const observer = new MutationObserver(scheduleApplyFit);
     observer.observe(container, { childList: true, subtree: true });
     // Google's DOM settles within a couple of seconds even for the slowest
-    // (personalized) variant — no need to watch forever.
-    setTimeout(() => observer.disconnect(), 8000);
+    // (personalized) variant — no need to watch forever. Also acts as a
+    // failsafe reveal in case sizing never settled for some reason.
+    setTimeout(() => {
+      observer.disconnect();
+      clearTimeout(settleTimer);
+      container.style.visibility = 'visible';
+    }, 8000);
   } catch (err) {
+    container.style.visibility = 'visible';
     onError?.(err);
   }
 }
