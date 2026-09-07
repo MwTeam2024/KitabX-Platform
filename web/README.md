@@ -45,7 +45,7 @@ screens fall back to the seed data in `lib/mockData.js`.
 | Route | Prototype screen | Module |
 | --- | --- | --- |
 | `/welcome` | 01 Splash | 1 Onboarding |
-| `/login`, `/login/verify` | 02 Auth, 03 OTP | 1 |
+| `/login` | 02 Auth, 03 OTP (inline — channel choice + code entry) | 1 |
 | `/onboarding` | multi-step profile/society/terms | 1 |
 | `/home` | 04 Discover | 4 Discover & search |
 | `/books/:id` | 05 Book detail | 3, 4 |

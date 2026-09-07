@@ -23,7 +23,10 @@ export class SocietiesController {
 
   @Get('societies')
   listSocieties() {
-    return this.societies.listSocieties();
+    // Only reviewed societies — one a member just requested via "Don't see
+    // your city or society?" isn't offered to anyone else until an admin
+    // approves it (see societies.service.js#listSocieties).
+    return this.societies.listSocieties({ verifiedOnly: true });
   }
 
   @Get('societies/:id')

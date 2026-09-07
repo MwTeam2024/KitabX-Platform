@@ -63,11 +63,11 @@ services:
         sync: false
       - key: ADMIN_BOOTSTRAP_PHONE # the one real phone number allowed into the admin console
         sync: false
-      - key: TWILIO_ACCOUNT_SID
+      - key: MSG91_AUTH_KEY
         sync: false
-      - key: TWILIO_AUTH_TOKEN
+      - key: MSG91_TEMPLATE_ID
         sync: false
-      - key: TWILIO_FROM_NUMBER
+      - key: MSG91_TEMPLATE_VAR_NAME
         sync: false
       - key: SMTP_HOST
         sync: false

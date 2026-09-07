@@ -22,7 +22,6 @@ export class DiscoveryController {
       condition: query.condition,
       q: query.q,
       sort: query.sort,
-      includeNearby: query.includeNearby !== 'false',
     });
   }
 

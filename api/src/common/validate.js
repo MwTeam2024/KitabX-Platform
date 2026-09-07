@@ -30,11 +30,36 @@ export function assertInt(value, fieldName = 'value', { min, max } = {}) {
   return n;
 }
 
+/**
+ * Every member-facing number in this app is Indian, so an explicit leading
+ * "+" is trusted as an already-fully-qualified international number
+ * (preserved as-is — this is the one path that tolerates a non-India code).
+ * Anything else is assumed Indian and reduced to the one canonical form
+ * (`+91` + 10 digits) regardless of how it was typed — bare 10 digits, a
+ * leading trunk "0", or the "91"/"0091" country code without a "+". The
+ * previous version blindly prefixed "+91" onto whatever wasn't already
+ * "+"-led, so "91 98765 43210" normalized to "+91919876543210" — a second,
+ * silently-different string for the exact same real number as the already-
+ * registered "+919876543210", which let one person register twice
+ * (confirmed live: two accounts, same real phone, different login screens).
+ */
 export function normalizePhone(phone) {
   if (typeof phone !== 'string') throw new BadRequestException('phone must be a string');
-  const digits = phone.replace(/[^\d+]/g, '');
-  if (digits.replace(/\D/g, '').length < 10) throw new BadRequestException('Enter a valid phone number');
-  return digits.startsWith('+') ? digits : `+91${digits.replace(/^0+/, '')}`;
+  const trimmed = phone.trim();
+
+  if (trimmed.startsWith('+')) {
+    const digits = trimmed.slice(1).replace(/\D/g, '');
+    if (digits.length < 10) throw new BadRequestException('Enter a valid phone number');
+    return `+${digits}`;
+  }
+
+  let digits = trimmed.replace(/\D/g, '');
+  digits = digits.replace(/^0+/, ''); // a leading trunk "0", or a "00" international-dialing prefix
+  if (digits.length > 10 && digits.startsWith('91')) {
+    digits = digits.slice(2).replace(/^0+/, '');
+  }
+  if (digits.length !== 10) throw new BadRequestException('Enter a valid phone number');
+  return `+91${digits}`;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

@@ -96,9 +96,6 @@ function AdminPhoneChangeForm({ currentPhone, onDone }) {
       const result = await adminService.requestPhoneChangeOtp(newPhone);
       setStep('verify');
       setSeconds(RESEND_SECONDS);
-      // In dev mode the code's own toast (api-client.js) already confirms
-      // it was sent — a second toast right behind it would just overwrite
-      // that code before it's readable.
       if (!result?.devCode) showToast(`OTP sent to ${newPhone}`);
     } catch (err) {
       showToast(err.message || 'Could not send the code');

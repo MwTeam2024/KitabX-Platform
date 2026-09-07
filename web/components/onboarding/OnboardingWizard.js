@@ -33,6 +33,8 @@ export default function OnboardingWizard() {
     blockId: user?.block?.id || '',
     flatUnit: user?.flatUnit || '',
     address: user?.address || '',
+    latitude: user?.latitude,
+    longitude: user?.longitude,
   });
 
   const patch = (updates) => setForm((f) => ({ ...f, ...updates }));
@@ -55,6 +57,8 @@ export default function OnboardingWizard() {
         blockId: form.blockId || undefined,
         flatUnit: form.flatUnit || undefined,
         address: form.address || undefined,
+        latitude: form.latitude,
+        longitude: form.longitude,
         locationRequest: form.locationRequest || undefined,
       });
       setSession(updated.user);

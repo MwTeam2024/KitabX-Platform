@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { toListingLocation, toPublicUser } from '../common/serializers/user.serializer';
+import { toBookListingLocation, toPublicUser } from '../common/serializers/user.serializer';
 import { grantPendingCredit, reversePendingCredit } from '../credits/credits.tx';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CloudinaryService } from '../uploads/cloudinary.service';
@@ -289,7 +289,7 @@ export class ListingsService {
       ownerId: listing.owner.id,
       ownerName: isMine ? `${listing.owner.name} (you)` : listing.owner.name,
       ownerVerified: listing.owner.verificationStatus === 'VERIFIED',
-      loc: toListingLocation(listing.owner, { revealFull }),
+      loc: toBookListingLocation(listing, { revealFull }),
       photos: listing.photos.map((p) => p.imageUrl),
       listedDaysAgo: Math.max(0, Math.floor((Date.now() - new Date(listing.createdAt).getTime()) / 86400000)),
       tags: [listing.condition, listing.book.genre].filter(Boolean),

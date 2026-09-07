@@ -23,6 +23,8 @@ model User {
   blockId             String?                     @map("block_id")
   flatUnit            String?                     @map("flat_unit")
   address             String?
+  latitude            Float?
+  longitude           Float?
   verificationStatus  VerificationStatus          @default(PENDING) @map("verification_status")
   isActive            Boolean                     @default(true) @map("is_active")
   acceptedTermsAt     DateTime?                   @map("accepted_terms_at")
@@ -149,6 +151,14 @@ model Society {
   latitude                Float?
   longitude               Float?
   isActive                Boolean                   @default(true) @map("is_active")
+  // Discovery/radius never looks at this — an unverified society (one
+  // auto-created from a member's "request a new society" popup, see
+  // auth.service.js) works exactly like any other the moment it exists.
+  // This only gates whether it's offered in everyone ELSE's signup/city
+  // picker (societies.service.js#listSocieties) until an admin reviews the
+  // request — admin-created societies start verified since nothing needs
+  // reviewing there.
+  verified                Boolean                   @default(true) @map("verified")
   createdAt               DateTime                  @default(now()) @map("created_at")
   updatedAt               DateTime                  @updatedAt @map("updated_at")
   location                Unsupported("geography")?
@@ -204,6 +214,9 @@ model LocationRequest {
   requestedById    String                @map("requested_by_id")
   cityName         String                @map("city_name")
   societyName      String                @map("society_name")
+  address          String?
+  latitude         Float?
+  longitude        Float?
   status           LocationRequestStatus @default(PENDING)
   reviewedById     String?               @map("reviewed_by_id")
   reviewedAt       DateTime?             @map("reviewed_at")

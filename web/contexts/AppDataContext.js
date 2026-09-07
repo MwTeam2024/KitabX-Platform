@@ -91,8 +91,19 @@ export function AppDataProvider({ children }) {
     mergeListings(received.map((r) => ({ ...r, mine: true, status: 'Received' })));
   }, [mergeListings]);
 
+  // Rapidly tapping the radius stepper (the most natural way to test it —
+  // and exactly how this was caught) fires several of these back to back
+  // before the earlier ones resolve. Network timing, not request order,
+  // decides which promise settles last, so without a guard a stale, already
+  // superseded response (e.g. the small radius that found nothing) could
+  // land after the real answer and wipe it back out — the discovery list
+  // would flicker to "no books nearby" for a radius that plainly has some.
+  // Only the most recently *initiated* call is allowed to commit state.
+  const searchRequestIdRef = useRef(0);
   const searchBooks = useCallback(async (params) => {
+    const myId = ++searchRequestIdRef.current;
     const { listings } = await discoveryService.search(params);
+    if (myId !== searchRequestIdRef.current) return listings; // superseded by a newer call
     mergeListings(listings);
     setDiscoveryKeys(listings.map((l) => l.key));
     return listings;
@@ -344,8 +355,8 @@ export function AppDataProvider({ children }) {
   }, []);
 
   const loadAdminSocieties = useCallback(async () => setAdminSocieties(await adminService.listSocieties()), []);
-  const addAdminSociety = useCallback(async (name, cityName) => {
-    await adminService.createSociety({ name, cityName });
+  const addAdminSociety = useCallback(async (society) => {
+    await adminService.createSociety(society);
     await loadAdminSocieties();
   }, [loadAdminSocieties]);
   const editAdminSociety = useCallback(async (id, updates) => {

@@ -4,12 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 
 const ToastContext = createContext(null);
 
-// Lets non-component code (api-client.js) surface a toast without going
-// through context — used only for the dev-mode OTP popup below, since a
-// plain fetch wrapper can't call a hook.
+// TEMPORARY — re-added for MSG91 delivery testing (removed once already, see
+// git history if this needs to go again). Lets non-component code
+// (api-client.js) surface a toast without going through context.
 let globalShowToast = null;
-// Longer-lived than a normal toast — this one has a 6-digit code to read
-// and (often) type in, not just a status line to glance at.
 export function notifyDevOtp(code) {
   globalShowToast?.(`Dev OTP: ${code}`, 12000);
 }

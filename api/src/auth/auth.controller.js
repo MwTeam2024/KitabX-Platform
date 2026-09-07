@@ -17,11 +17,24 @@ export class AuthController {
     this.oauthService = oauthService;
   }
 
+  /**
+   * `intent: 'signup'` (sent only by the Create Account tab, same convention
+   * as `otp/request-email` below) blocks an already-registered number before
+   * any code is even sent — confirmed live that generating and delivering an
+   * OTP for a signup attempt against a taken number, only to reject it at
+   * the *verify* step afterward, reads as a broken flow: you type your
+   * details, wait for a code, enter it, and only then find out it was never
+   * going to work.
+   */
   @Post('otp/request')
   @Params({ 0: Body() })
   async requestOtp(body) {
     required(body, ['phone']);
     const phone = normalizePhone(body.phone);
+    if (body.intent === 'signup') {
+      const clash = await this.authService.findUserByPhone(phone);
+      if (clash) throw new ConflictException('This number is already registered — sign in instead.');
+    }
     return this.otpService.requestOtp(phone);
   }
 
@@ -30,12 +43,24 @@ export class AuthController {
    * member in as-is; a new phone creates the account using whatever profile
    * fields the signup form collected (society/block/flat/terms — §5).
    *
-   * Task 33/38: a signup started from the merged phone-or-email field may
-   * have verified an *email* first (see `otp/verify-email-signup` below) —
-   * `emailVerificationToken` is that step's proof, checked server-side so a
-   * client can never just claim an email it never actually verified. Phone
-   * stays the one thing every account is ultimately created around either
-   * way — this just lets the email come along for the ride when there is one.
+   * `firstName`/`lastName` only ever get sent by the *Create account* tab —
+   * confirmed live that submitting one of those against an already-registered
+   * number silently logged the person into the stranger's existing account
+   * (whatever they'd just typed was thrown away, no warning shown), which
+   * reads exactly like "registering again" even though no duplicate row is
+   * created. Same conflict message as the email-signup and phone-change
+   * paths below, and checked only *after* the OTP verify above, so this
+   * can't be used to probe whether a number is registered without first
+   * proving you actually control it.
+   *
+   * Email arrives one of two ways, depending which channel the signup form's
+   * "send the code to WhatsApp or email" step sent the OTP to: this endpoint
+   * only ever runs when WhatsApp/phone was the chosen (and now OTP-proven)
+   * channel, so `email` is whatever the member typed in the always-required
+   * email field — never independently proven, same trust level as the name
+   * or address fields right next to it on that form. `emailVerificationToken`
+   * (Task 33/38's older email-first path) is proof of the opposite case and
+   * takes priority if somehow both are present.
    */
   @Post('otp/verify')
   @Params({ 0: Body(), 1: Res({ passthrough: true }) })
@@ -44,9 +69,19 @@ export class AuthController {
     const phone = normalizePhone(body.phone);
     await this.otpService.verifyOtp(phone, body.code);
 
-    const email = body.emailVerificationToken
+    if (body.firstName || body.lastName) {
+      const clash = await this.authService.findUserByPhone(phone);
+      if (clash) throw new ConflictException('This number is already registered — sign in instead.');
+    }
+
+    let email = body.emailVerificationToken
       ? this.authService.verifyEmailVerificationToken(body.emailVerificationToken)
       : undefined;
+    if (!email && body.email) {
+      email = normalizeEmail(body.email);
+      const emailClash = await this.authService.findUserByEmail(email);
+      if (emailClash) throw new ConflictException('This email is already registered — sign in instead.');
+    }
 
     const combinedName = `${body.firstName || ''} ${body.lastName || ''}`.trim();
     const user = await this.authService.findOrCreateUser(phone, {
@@ -58,6 +93,8 @@ export class AuthController {
       blockId: body.blockId,
       flatUnit: body.flatUnit,
       address: body.address,
+      latitude: body.latitude,
+      longitude: body.longitude,
       acceptedTerms: body.acceptedTerms,
       locationRequest: body.locationRequest,
     });
@@ -105,6 +142,44 @@ export class AuthController {
     const clash = await this.authService.findUserByEmail(email);
     if (clash) throw new ConflictException('This email is already registered — sign in instead.');
     return { verified: true, email, emailVerificationToken: this.authService.signEmailVerificationToken(email) };
+  }
+
+  /**
+   * Finishes a signup where the member chose *email* as the OTP channel on
+   * the "send the code to WhatsApp or email" step — `emailVerificationToken`
+   * (from `otp/verify-email-signup` above) proves the email, but there's no
+   * phone OTP in this branch at all, so `phone` here is whatever was typed
+   * into the always-required WhatsApp Number field, trusted as-is rather
+   * than independently proven — exactly the mirror image of `otp/verify`
+   * above trusting a raw `email` when *phone* was the chosen channel.
+   */
+  @Post('signup/complete-with-email')
+  @Params({ 0: Body(), 1: Res({ passthrough: true }) })
+  async completeSignupWithEmail(body, res) {
+    required(body, ['emailVerificationToken', 'phone']);
+    const email = this.authService.verifyEmailVerificationToken(body.emailVerificationToken);
+    const phone = normalizePhone(body.phone);
+    const clash = await this.authService.findUserByPhone(phone);
+    if (clash) throw new ConflictException('This number is already registered — sign in instead.');
+
+    const combinedName = `${body.firstName || ''} ${body.lastName || ''}`.trim();
+    const user = await this.authService.findOrCreateUser(phone, {
+      name: combinedName || body.name || undefined,
+      email,
+      cityId: body.cityId,
+      areaId: body.areaId,
+      societyId: body.societyId,
+      blockId: body.blockId,
+      flatUnit: body.flatUnit,
+      address: body.address,
+      latitude: body.latitude,
+      longitude: body.longitude,
+      acceptedTerms: body.acceptedTerms,
+      locationRequest: body.locationRequest,
+    });
+
+    this.authService.issueSession(res, user);
+    return { user: toSelfUser(user) };
   }
 
   @Post('otp/verify-email')

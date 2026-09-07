@@ -50,21 +50,16 @@ export class OtpService {
     return code;
   }
 
+  // TEMPORARY — re-added for MSG91 delivery testing (removed once already,
+  // see git history if this needs to go again). Never surfaced in
+  // production regardless: real users must never be able to read another
+  // account's OTP back out of the API response.
   _response(code) {
     const isProd = this.config.get('NODE_ENV') === 'production';
-    // TEMPORARY, for client testing before real SMS/email is wired up — set
-    // EXPOSE_DEV_OTP=true on Render to surface the code here even in
-    // production. This is a real security hole while it's on: anyone who
-    // knows a phone/email can log in as that person without ever touching
-    // their phone. Turn it back off (unset the env var, no redeploy needed)
-    // once client testing is done and before any real users show up.
-    const exposeAnyway = this.config.get('EXPOSE_DEV_OTP') === 'true';
     return {
       sent: true,
       expiresInSeconds: OTP_TTL_SECONDS,
-      // Only surfaced outside production so the app is usable without a real
-      // SMS/SMTP account configured — see sms.service.js / email.service.js.
-      devCode: isProd && !exposeAnyway ? undefined : code,
+      devCode: isProd ? undefined : code,
     };
   }
 
@@ -73,7 +68,10 @@ export class OtpService {
     const message = purpose === 'phone-change' || purpose === 'admin-phone-change'
       ? `Your KitabX code to confirm your new number is ${code}. It expires in 5 minutes.`
       : `Your KitabX verification code is ${code}. It expires in 5 minutes.`;
-    await this.sms.send(phone, message);
+    // `code` passed alongside the free-text `message` — a DLT-registered
+    // template provider (MSG91) fills in a fixed, pre-approved template
+    // with just the code as a variable, it can't send arbitrary text.
+    await this.sms.send(phone, message, code);
     return this._response(code);
   }
 

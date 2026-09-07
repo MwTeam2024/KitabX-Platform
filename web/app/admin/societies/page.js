@@ -5,6 +5,7 @@ import { AdminTopline } from '@/components/admin/AdminShell';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/components/ui/ToastProvider';
 import { useSheet } from '@/components/ui/SheetProvider';
+import LocationMapPicker from '@/components/location/LocationMapPicker';
 import { timeAgo } from '@/lib/dates';
 
 /** Add/edit/delete cities and societies, plus review members' requests to
@@ -21,7 +22,7 @@ export default function AdminSocietiesPage() {
 
   const [tab, setTab] = useState('societies'); // 'societies' | 'requests'
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', city: '' });
+  const [form, setForm] = useState({ name: '', city: '', address: '', latitude: null, longitude: null });
   const [editing, setEditing] = useState(null); // { id, name, city }
 
   const approve = async (r) => {
@@ -43,10 +44,16 @@ export default function AdminSocietiesPage() {
   };
 
   const save = async () => {
-    if (!form.name.trim() || !form.city.trim()) return showToast('Please fill in both fields');
+    if (!form.name.trim() || !form.city.trim()) return showToast('Please fill in the name and city');
     try {
-      await addAdminSociety(form.name.trim(), form.city.trim());
-      setForm({ name: '', city: '' });
+      await addAdminSociety({
+        name: form.name.trim(),
+        cityName: form.city.trim(),
+        address: form.address.trim() || null,
+        latitude: form.latitude,
+        longitude: form.longitude,
+      });
+      setForm({ name: '', city: '', address: '', latitude: null, longitude: null });
       setShowForm(false);
       showToast(`${form.name.trim()} added`);
     } catch (err) {
@@ -63,6 +70,23 @@ export default function AdminSocietiesPage() {
     } catch (err) {
       showToast(err.message || 'Could not update this society');
     }
+  };
+
+  const editLocation = (society) => {
+    openSheet(`${society.name} — location`, (
+      <EditSocietyLocationForm
+        society={society}
+        onSave={async (pending) => {
+          try {
+            await editAdminSociety(society.id, pending);
+            showToast('Location updated');
+          } catch (err) {
+            showToast(err.message || 'Could not update this society’s location');
+          }
+          closeSheet();
+        }}
+      />
+    ));
   };
 
   const confirmDelete = (society) => {
@@ -119,13 +143,13 @@ export default function AdminSocietiesPage() {
         <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
-              <tr><th>Requested By</th><th>Address</th><th>Society</th><th>City</th><th>When</th><th /></tr>
+              <tr><th>Requested By</th><th>Society Address</th><th>Society</th><th>City</th><th>When</th><th /></tr>
             </thead>
             <tbody>
               {admin.locationRequests.map((r) => (
                 <tr key={r.id}>
                   <td>{r.requestedBy}</td>
-                  <td>{r.requestedByAddress || '—'}</td>
+                  <td>{r.address || r.requestedByAddress || '—'}</td>
                   <td>{r.societyName}</td>
                   <td>{r.cityName}</td>
                   <td>{timeAgo(r.createdAt)}</td>
@@ -164,6 +188,15 @@ export default function AdminSocietiesPage() {
               />
             </div>
           </div>
+
+          <LocationMapPicker
+            label="Society Address"
+            address={form.address}
+            lat={form.latitude}
+            lng={form.longitude}
+            onChange={({ lat, lng, address }) => setForm((f) => ({ ...f, latitude: lat, longitude: lng, address }))}
+          />
+
           <button className="btn btn-primary" style={{ width: 'auto', padding: '10px 22px' }} onClick={save}>
             Save Society
           </button>
@@ -213,6 +246,9 @@ export default function AdminSocietiesPage() {
                             className="ghost-btn sm"
                             onClick={() => setEditing({ id: s.id, name: s.name, city: s.city?.name || '' })}
                           >Edit</button>
+                          <button className="ghost-btn sm" onClick={() => editLocation(s)}>
+                            {s.latitude != null ? 'Location' : 'Set location'}
+                          </button>
                           <button className="ghost-btn sm" onClick={() => confirmDelete(s)}>Delete</button>
                         </div>
                       )}
@@ -224,6 +260,33 @@ export default function AdminSocietiesPage() {
           </table>
         </div>
       )}
+    </>
+  );
+}
+
+/** The "Set location"/"Location" sheet body — needs real component state
+ * (not just a closure variable) so LocationMapPicker's own address field
+ * stays a properly working controlled input as the visitor types or pans. */
+function EditSocietyLocationForm({ society, onSave }) {
+  const [pending, setPending] = useState({
+    address: society.address || '', latitude: society.latitude, longitude: society.longitude,
+  });
+
+  return (
+    <>
+      <LocationMapPicker
+        address={pending.address}
+        lat={pending.latitude}
+        lng={pending.longitude}
+        onChange={({ lat, lng, address }) => setPending({ latitude: lat, longitude: lng, address })}
+      />
+      <button
+        className="btn btn-primary"
+        style={{ width: 'auto', padding: '10px 22px' }}
+        onClick={() => onSave(pending)}
+      >
+        Save location
+      </button>
     </>
   );
 }

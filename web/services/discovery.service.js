@@ -6,7 +6,7 @@ import { apiClient } from "@/lib/api-client";
  * the client.
  */
 export const discoveryService = {
-  search: ({ radiusKm, genre, language, condition, q, sort, includeNearby } = {}) => {
+  search: ({ radiusKm, genre, language, condition, q, sort } = {}) => {
     const params = new URLSearchParams();
     if (radiusKm != null) params.set("radiusKm", radiusKm);
     if (genre && genre !== "All") params.set("genre", genre);
@@ -14,7 +14,6 @@ export const discoveryService = {
     if (condition) params.set("condition", condition);
     if (q) params.set("q", q);
     if (sort) params.set("sort", sort);
-    if (includeNearby === false) params.set("includeNearby", "false");
     return apiClient.get(`/discovery?${params.toString()}`);
   },
   /** Platform-wide totals for the home page stat tiles — never per-society. */

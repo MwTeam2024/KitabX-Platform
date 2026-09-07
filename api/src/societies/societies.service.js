@@ -34,18 +34,30 @@ export class SocietiesService {
    * rarely (a new society, or its member/listing counts drifting), so a
    * short cache avoids re-querying on every keystroke of the city filter.
    */
-  async listSocieties() {
+  /**
+   * `verifiedOnly` hides any society still awaiting admin review from the
+   * result — used by the public signup/city picker (societies.controller.js)
+   * so it only ever offers already-reviewed societies. The admin's own
+   * Societies list calls this with no options and sees everything,
+   * including unreviewed ones, since that's exactly what needs reviewing.
+   * Filtered in memory rather than in the query so both callers share the
+   * one cache entry.
+   */
+  async listSocieties({ verifiedOnly = false } = {}) {
     const cached = await this.redis.get(SOCIETIES_CACHE_KEY);
-    if (cached) return JSON.parse(cached);
-
-    const societies = await this.prisma.society.findMany({
-      where: { isActive: true },
-      include: { area: { include: { city: true } }, _count: { select: { users: true, listings: true } } },
-      orderBy: { name: 'asc' },
-    });
-    const dtos = societies.map((s) => this._toDto(s));
-    await this.redis.set(SOCIETIES_CACHE_KEY, JSON.stringify(dtos), SOCIETIES_CACHE_TTL_SECONDS);
-    return dtos;
+    let dtos;
+    if (cached) {
+      dtos = JSON.parse(cached);
+    } else {
+      const societies = await this.prisma.society.findMany({
+        where: { isActive: true },
+        include: { area: { include: { city: true } }, _count: { select: { users: true, listings: true } } },
+        orderBy: { name: 'asc' },
+      });
+      dtos = societies.map((s) => this._toDto(s));
+      await this.redis.set(SOCIETIES_CACHE_KEY, JSON.stringify(dtos), SOCIETIES_CACHE_TTL_SECONDS);
+    }
+    return verifiedOnly ? dtos.filter((s) => s.verified) : dtos;
   }
 
   async getSociety(id) {
@@ -86,12 +98,15 @@ export class SocietiesService {
   /** Admin's "Add Society" form only collects name + city (see admin/societies
    * page) — find-or-create the City/Area chain rather than requiring the
    * admin to manage geography IDs by hand. */
-  async adminCreateSociety({ name, cityName, stateName, address, latitude, longitude }) {
+  async adminCreateSociety({ name, cityName, stateName, address, latitude, longitude, verified }) {
     const city = await this._findOrCreateCity(cityName, stateName);
     const area = await this._findOrCreateArea(city.id, cityName);
 
     const society = await this.prisma.society.create({
-      data: { name, address, areaId: area.id, latitude: latitude ?? null, longitude: longitude ?? null },
+      data: {
+        name, address, areaId: area.id, latitude: latitude ?? null, longitude: longitude ?? null,
+        verified: verified ?? true,
+      },
     });
     await this.prisma.societyPickupPoint.createMany({
       data: DEFAULT_PICKUP_POINTS.map((pointName) => ({ societyId: society.id, name: pointName })),
@@ -107,6 +122,7 @@ export class SocietiesService {
     if (updates.name !== undefined) data.name = updates.name;
     if (updates.address !== undefined) data.address = updates.address;
     if (updates.isActive !== undefined) data.isActive = updates.isActive;
+    if (updates.verified !== undefined) data.verified = updates.verified;
 
     if (updates.cityName) {
       const city = await this._findOrCreateCity(updates.cityName, updates.stateName);
@@ -159,6 +175,7 @@ export class SocietiesService {
       label: society.area?.city ? `${society.name}, ${society.area.city.name}` : society.name,
       latitude: society.latitude,
       longitude: society.longitude,
+      verified: society.verified,
       memberCount: society._count?.users ?? 0,
       activeListingCount: society._count?.listings ?? 0,
       blocks: withBlocks ? society.blocks : undefined,

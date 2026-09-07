@@ -326,9 +326,7 @@ function PhoneChangeForm({ currentPhone, onDone }) {
       const result = await authService.requestPhoneChangeOtp(newPhone);
       setStep('verify');
       setSeconds(RESEND_SECONDS);
-      // In dev mode the code's own toast (api-client.js) already confirms
-      // it was sent — a second toast right behind it would just overwrite
-      // that code before it's readable.
+      // TEMPORARY — see AuthForm.js#resendSignupOtp for why this is gated on devCode.
       if (!result?.devCode) showToast(`OTP sent to ${newPhone}`);
     } catch (err) {
       showToast(err.message || 'Could not send the code');
@@ -498,6 +496,8 @@ function LocationChangeForm({ user, onDone }) {
     blockId: user.block?.id || '',
     flatUnit: user.flatUnit || '',
     address: user.address || '',
+    latitude: user.latitude,
+    longitude: user.longitude,
   });
   const [busy, setBusy] = useState(false);
 
@@ -512,6 +512,8 @@ function LocationChangeForm({ user, onDone }) {
         blockId: values.societyId ? (values.blockId || null) : undefined,
         flatUnit: values.flatUnit,
         address: values.address,
+        latitude: values.latitude,
+        longitude: values.longitude,
         locationRequest: values.locationRequest || undefined,
       });
       onDone(updated, hasLocationRequest ? values.locationRequest : null);

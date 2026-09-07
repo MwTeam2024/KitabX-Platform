@@ -33,9 +33,7 @@ async function request(path, { method = "GET", body, headers, ...rest } = {}) {
   }
   if (res.status === 204) return null;
   const json = await res.json();
-  // Only ever present outside production (see otp.service.js) — surfacing it
-  // here covers every OTP flow (signup, sign-in, admin login, phone/email
-  // change) from one place instead of each screen showing it separately.
+  // TEMPORARY — for MSG91 delivery testing. See ToastProvider.js#notifyDevOtp.
   if (json?.devCode) notifyDevOtp(json.devCode);
   return json;
 }

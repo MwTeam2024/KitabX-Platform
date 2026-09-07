@@ -40,13 +40,12 @@ export default function HomePage() {
   const [language, setLanguage] = useState(null);
   const [condition, setCondition] = useState(null);
   const [sort, setSort] = useState('newest');
-  const [includeNearby, setIncludeNearby] = useState(false);
   const debouncedQuery = useDebounce(query, 300);
 
   useEffect(() => {
-    searchBooks({ radiusKm, genre, language, condition, q: debouncedQuery, sort, includeNearby }).catch(() => {});
+    searchBooks({ radiusKm, genre, language, condition, q: debouncedQuery, sort }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [radiusKm, genre, language, condition, debouncedQuery, sort, includeNearby]);
+  }, [radiusKm, genre, language, condition, debouncedQuery, sort]);
 
   useEffect(() => {
     discoveryService.stats().then(setStats).catch(() => {});
@@ -121,16 +120,6 @@ export default function HomePage() {
 
         <div className="section-row">
           <SectionTitle>Available near you</SectionTitle>
-          <button
-            className="link-green"
-            onClick={() => {
-              setIncludeNearby((v) => !v);
-              showToast(includeNearby ? 'Showing your society only' : 'Now showing nearby societies too');
-            }}
-          >
-            {includeNearby ? 'This society' : 'Nearby'}
-            <Icon name="mapPin" style={{ width: 12, height: 12 }} />
-          </button>
         </div>
 
         <GenreChips

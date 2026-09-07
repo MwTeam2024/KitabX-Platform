@@ -1,7 +1,7 @@
 import { Dependencies, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
-import { toListingLocation } from '../common/serializers/user.serializer';
+import { toBookListingLocation } from '../common/serializers/user.serializer';
 
 const STATS_CACHE_KEY = 'discovery:stats';
 const STATS_CACHE_TTL_SECONDS = 30;
@@ -22,7 +22,7 @@ export class DiscoveryService {
     this.redis = redis;
   }
 
-  async discover(viewer, { radiusKm = 0.5, genre, language, condition, q, sort = 'newest', includeNearby = true } = {}) {
+  async discover(viewer, { radiusKm = 0.5, genre, language, condition, q, sort = 'newest' } = {}) {
     if (!viewer.societyId) {
       return { listings: [], note: 'Join a society to see books nearby.' };
     }
@@ -30,7 +30,7 @@ export class DiscoveryService {
     // Independent of each other — fired together instead of stacking two
     // sequential round trips to Neon.
     const [nearbySocieties, received] = await Promise.all([
-      this._societiesWithinRadius(viewer.societyId, includeNearby ? radiusKm : 0),
+      this._societiesWithinRadius(viewer.societyId, radiusKm),
       this.prisma.exchange.findMany({
         // A book already sitting on the viewer's own shelf shouldn't be
         // offered to them again, even as a different member's copy.
@@ -87,6 +87,7 @@ export class DiscoveryService {
       include: {
         book: true,
         owner: { include: { society: true, block: true } },
+        society: true,
         photos: { orderBy: { sortOrder: 'asc' } },
       },
       orderBy: sort === 'newest' ? { createdAt: 'desc' } : undefined,
@@ -161,7 +162,7 @@ export class DiscoveryService {
       owner: initialsOf(listing.owner.name),
       ownerId: listing.owner.id,
       ownerName: listing.owner.name,
-      loc: toListingLocation(listing.owner),
+      loc: toBookListingLocation(listing),
       listedDaysAgo: Math.max(0, Math.floor((Date.now() - new Date(listing.createdAt).getTime()) / 86400000)),
       photos: listing.photos.map((p) => p.imageUrl),
     };

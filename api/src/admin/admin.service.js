@@ -135,6 +135,10 @@ export class AdminService {
       // Task 39 — blank/absent for a user who only ever signed up/in by
       // phone (Task 33/38's email-OTP path is the only way this gets set).
       email: u.email,
+      // Admin-only (this DTO never reaches a member-facing endpoint) — the
+      // Users tab shows this instead of society name, since two members in
+      // the same society are otherwise indistinguishable at a glance.
+      address: u.address,
       status: !u.isActive ? 'suspended' : u.verificationStatus === 'PENDING' ? 'pending' : 'active',
       verified: u.verificationStatus === 'VERIFIED',
       rating: ratingMap.get(u.id) || null,
@@ -331,6 +335,9 @@ export class AdminService {
       id: r.id,
       cityName: r.cityName,
       societyName: r.societyName,
+      address: r.address,
+      latitude: r.latitude,
+      longitude: r.longitude,
       requestedBy: r.requestedBy.name,
       requestedByPhone: r.requestedBy.phone,
       requestedByAddress: r.requestedBy.address,
@@ -338,19 +345,27 @@ export class AdminService {
     }));
   }
 
-  /** Approving actually creates the City/Area/Society (same find-or-create
-   * path as an admin manually adding one from the Societies tab) and moves
-   * the requester straight into it, so approval is the one action that both
-   * unblocks their account and adds the option for everyone else. */
+  /** The society was already created — just unverified — the moment the
+   * member submitted the request (see auth.service.js#findOrCreateUser /
+   * #updateProfile), so they've had full, real discovery/radius access this
+   * whole time. Approving only flips it to verified so it also shows up in
+   * everyone else's signup/city picker (societies.service.js#listSocieties).
+   * `createdSocietyId` is only ever missing for a request that predates that
+   * change — falls back to the old create-on-approve path for those. */
   async approveLocationRequest(id, adminId) {
     const request = await this.prisma.locationRequest.findUnique({ where: { id } });
     if (!request) throw new NotFoundException('Location request not found');
     if (request.status !== 'PENDING') throw new BadRequestException('This request was already reviewed');
 
-    const society = await this.societiesService.adminCreateSociety({
-      name: request.societyName,
-      cityName: request.cityName,
-    });
+    const society = request.createdSocietyId
+      ? await this.societiesService.adminUpdateSociety(request.createdSocietyId, { verified: true })
+      : await this.societiesService.adminCreateSociety({
+          name: request.societyName,
+          cityName: request.cityName,
+          address: request.address,
+          latitude: request.latitude,
+          longitude: request.longitude,
+        });
 
     await this.prisma.$transaction([
       this.prisma.locationRequest.update({
@@ -362,10 +377,12 @@ export class AdminService {
           createdSocietyId: society.id,
         },
       }),
-      this.prisma.user.update({
+      // Only needed on the legacy fallback above — the normal path already
+      // has the requester living in this society since it was created.
+      ...(request.createdSocietyId ? [] : [this.prisma.user.update({
         where: { id: request.requestedById },
         data: { cityId: society.city.id, areaId: society.area.id, societyId: society.id },
-      }),
+      })]),
     ]);
 
     await this.notifications.create(this.prisma, {
@@ -390,6 +407,18 @@ export class AdminService {
     const request = await this.prisma.locationRequest.findUnique({ where: { id } });
     if (!request) throw new NotFoundException('Location request not found');
     if (request.status !== 'PENDING') throw new BadRequestException('This request was already reviewed');
+
+    // The requester has been living in this (unverified) society since they
+    // submitted the request — a reject has to actually take that away, not
+    // just flag the request, or discovery/radius would silently keep
+    // working for them off a location an admin just said no to.
+    if (request.createdSocietyId) {
+      await this.societiesService.adminUpdateSociety(request.createdSocietyId, { isActive: false });
+      await this.prisma.user.update({
+        where: { id: request.requestedById },
+        data: { societyId: null, areaId: null, cityId: null },
+      });
+    }
 
     await this.prisma.locationRequest.update({
       where: { id },

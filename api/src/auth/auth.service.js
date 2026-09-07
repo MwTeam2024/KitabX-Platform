@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Dependencies, Injectable } from
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { SocietiesService } from '../societies/societies.service';
 
 const USER_INCLUDE = { society: true, block: true, city: true, area: true };
 
@@ -10,13 +11,14 @@ const USER_INCLUDE = { society: true, block: true, city: true, area: true };
  * OTP, and issue/clear the httpOnly cookie the frontend already sends with
  * every request (`credentials: 'include'` in lib/api-client.js).
  */
-@Dependencies(PrismaService, JwtService, ConfigService)
+@Dependencies(PrismaService, JwtService, ConfigService, SocietiesService)
 @Injectable()
 export class AuthService {
-  constructor(prisma, jwt, config) {
+  constructor(prisma, jwt, config, societies) {
     this.prisma = prisma;
     this.jwt = jwt;
     this.config = config;
+    this.societies = societies;
   }
 
   async findUserByPhone(phone) {
@@ -43,6 +45,26 @@ export class AuthService {
 
     const memberId = await this.generateMemberId();
 
+    // A society picker with nothing that matches yet — rather than leaving
+    // the member with no society at all until an admin gets to the request
+    // (fully blocking discovery/radius in the meantime, see
+    // discovery.service.js), create the real society right away, just
+    // unverified, and drop the member straight into it. Approving the
+    // request later only flips it to verified so it also shows up in
+    // everyone else's picker (see admin.service.js#approveLocationRequest);
+    // rejecting deactivates it and pulls the member back out.
+    let requestedSociety = null;
+    if (!profile.societyId && profile.locationRequest?.cityName && profile.locationRequest?.societyName) {
+      requestedSociety = await this.societies.adminCreateSociety({
+        name: profile.locationRequest.societyName.trim(),
+        cityName: profile.locationRequest.cityName.trim(),
+        address: profile.locationRequest.address || null,
+        latitude: profile.locationRequest.latitude ?? null,
+        longitude: profile.locationRequest.longitude ?? null,
+        verified: false,
+      });
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -50,12 +72,14 @@ export class AuthService {
           memberId,
           name: profile.name || 'New Member',
           email: profile.email || null,
-          cityId: profile.cityId || null,
-          areaId: profile.areaId || null,
-          societyId: profile.societyId || null,
+          cityId: requestedSociety ? requestedSociety.city.id : (profile.cityId || null),
+          areaId: requestedSociety ? requestedSociety.area.id : (profile.areaId || null),
+          societyId: requestedSociety ? requestedSociety.id : (profile.societyId || null),
           blockId: profile.blockId || null,
           flatUnit: profile.flatUnit || null,
           address: profile.address || null,
+          latitude: profile.latitude ?? null,
+          longitude: profile.longitude ?? null,
           acceptedTermsAt: profile.acceptedTerms ? new Date() : null,
         },
         include: USER_INCLUDE,
@@ -64,15 +88,16 @@ export class AuthService {
       await tx.userNotificationPreference.create({ data: { userId: user.id } });
       await tx.userVerification.create({ data: { userId: user.id, status: 'PENDING' } });
 
-      // A society picker with nothing that matches yet — the member is
-      // created without one, and this stands in for it until an admin
-      // approves the request (see admin.service.js#approveLocationRequest).
-      if (!profile.societyId && profile.locationRequest?.cityName && profile.locationRequest?.societyName) {
+      if (requestedSociety) {
         await tx.locationRequest.create({
           data: {
             requestedById: user.id,
             cityName: profile.locationRequest.cityName.trim(),
             societyName: profile.locationRequest.societyName.trim(),
+            address: profile.locationRequest.address || null,
+            latitude: profile.locationRequest.latitude ?? null,
+            longitude: profile.locationRequest.longitude ?? null,
+            createdSocietyId: requestedSociety.id,
           },
         });
       }
@@ -143,25 +168,47 @@ export class AuthService {
     if (updates.blockId !== undefined) data.blockId = updates.blockId;
     if (updates.flatUnit !== undefined) data.flatUnit = updates.flatUnit;
     if (updates.address !== undefined) data.address = updates.address;
+    if (updates.latitude !== undefined) data.latitude = updates.latitude;
+    if (updates.longitude !== undefined) data.longitude = updates.longitude;
 
     const wantsLocationRequest = updates.locationRequest?.cityName && updates.locationRequest?.societyName;
     if (!Object.keys(data).length && !wantsLocationRequest) {
       throw new BadRequestException('No recognized fields to update');
     }
 
+    // Same "not in the picker yet" request as signup (findOrCreateUser
+    // above) — move the member into the real (unverified) society right
+    // away rather than stranding them in their old one until an admin
+    // reviews it; see admin.service.js#approveLocationRequest/rejectLocationRequest.
+    let requestedSociety = null;
+    if (wantsLocationRequest) {
+      requestedSociety = await this.societies.adminCreateSociety({
+        name: updates.locationRequest.societyName.trim(),
+        cityName: updates.locationRequest.cityName.trim(),
+        address: updates.locationRequest.address || null,
+        latitude: updates.locationRequest.latitude ?? null,
+        longitude: updates.locationRequest.longitude ?? null,
+        verified: false,
+      });
+      data.cityId = requestedSociety.city.id;
+      data.areaId = requestedSociety.area.id;
+      data.societyId = requestedSociety.id;
+    }
+
     const user = Object.keys(data).length
       ? await this.prisma.user.update({ where: { id: userId }, data, include: USER_INCLUDE })
       : await this.prisma.user.findUnique({ where: { id: userId }, include: USER_INCLUDE });
 
-    // Same "not in the picker yet" request as signup (findOrCreateUser
-    // above) — a member already has a society here, so this doesn't touch
-    // it; approval just gives them somewhere new to move into.
     if (wantsLocationRequest) {
       await this.prisma.locationRequest.create({
         data: {
           requestedById: userId,
           cityName: updates.locationRequest.cityName.trim(),
           societyName: updates.locationRequest.societyName.trim(),
+          address: updates.locationRequest.address || null,
+          latitude: updates.locationRequest.latitude ?? null,
+          longitude: updates.locationRequest.longitude ?? null,
+          createdSocietyId: requestedSociety.id,
         },
       });
     }

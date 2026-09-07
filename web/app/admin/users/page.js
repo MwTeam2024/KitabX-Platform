@@ -43,7 +43,7 @@ export default function AdminUsersPage() {
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Name</th><th>Phone</th><th>Email</th><th>Member ID</th><th>Society</th><th>Rating</th>
+              <th>Name</th><th>Phone</th><th>Email</th><th>Member ID</th><th>Address</th><th>Rating</th>
               <th>Verification</th><th>Account</th><th>Actions</th>
             </tr>
           </thead>
@@ -56,7 +56,7 @@ export default function AdminUsersPage() {
                   <td>{u.phone}</td>
                   <td>{u.email || '—'}</td>
                   <td>{u.memberId}</td>
-                  <td>{u.society?.name || '—'}</td>
+                  <td>{u.address || '—'}</td>
                   <td>{u.rating != null ? `${u.rating}★` : '—'}</td>
                   <td>{u.verified ? 'Verified' : 'Not verified'}</td>
                   <td style={{ color: status.color, fontWeight: 600 }}>{status.label}</td>
@@ -111,7 +111,7 @@ export default function AdminUsersPage() {
               );
             })}
             {!rows.length && (
-              <tr><td colSpan={8} style={{ color: 'var(--outer-muted)' }}>No users match “{query}”.</td></tr>
+              <tr><td colSpan={9} style={{ color: 'var(--outer-muted)' }}>No users match “{query}”.</td></tr>
             )}
           </tbody>
         </table>

@@ -1,7 +1,7 @@
 import { apiClient } from "@/lib/api-client";
 
 export const authService = {
-  requestOtp: (phone) => apiClient.post("/auth/otp/request", { phone }),
+  requestOtp: (phone, opts = {}) => apiClient.post("/auth/otp/request", { phone, ...opts }),
   /** `profile` carries the signup fields (firstName, lastName, societyId, blockId,
    * flatUnit, acceptedTerms) — ignored by the backend for an existing phone. */
   verifyOtp: (phone, code, profile = {}) => apiClient.post("/auth/otp/verify", { phone, code, ...profile }),
@@ -13,6 +13,10 @@ export const authService = {
    * with the returned `emailVerificationToken`. */
   requestSignupEmailOtp: (email) => apiClient.post("/auth/otp/request-email", { email, intent: "signup" }),
   verifySignupEmailOtp: (email, code) => apiClient.post("/auth/otp/verify-email-signup", { email, code }),
+  /** Finishes a signup where email (not WhatsApp) was the chosen OTP
+   * channel — `emailVerificationToken` from the call above, plus the
+   * always-required WhatsApp number and the rest of the profile. */
+  completeSignupWithEmail: (payload) => apiClient.post("/auth/signup/complete-with-email", payload),
   /** Google/Apple sign-in — login-only, same rule as email-OTP above. */
   googleLogin: (idToken) => apiClient.post("/auth/oauth/google", { idToken }),
   appleLogin: (idToken) => apiClient.post("/auth/oauth/apple", { idToken }),
