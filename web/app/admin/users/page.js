@@ -11,6 +11,7 @@ const STATUS_STYLE = {
   pending: { color: 'var(--gold-deep)', label: 'Pending approval' },
   suspended: { color: 'var(--sindoor)', label: 'Suspended' },
   rejected: { color: 'var(--text-muted)', label: 'Rejected' },
+  deleted: { color: 'var(--text-muted)', label: 'Deleted' },
 };
 
 /** View/search users, approve, suspend or reactivate — the MVP admin controls. */
@@ -51,7 +52,7 @@ export default function AdminUsersPage() {
             {rows.map((u) => {
               const status = STATUS_STYLE[u.status] || STATUS_STYLE.active;
               return (
-                <tr key={u.id} style={{ opacity: u.status === 'rejected' ? 0.45 : 1 }}>
+                <tr key={u.id} style={{ opacity: u.status === 'rejected' || u.status === 'deleted' ? 0.45 : 1 }}>
                   <td>{u.name}</td>
                   <td>{u.phone}</td>
                   <td>{u.email || '—'}</td>
@@ -82,6 +83,8 @@ export default function AdminUsersPage() {
                         </>
                       ) : u.status === 'rejected' ? (
                         <span style={{ fontSize: 11, color: 'var(--outer-muted)' }}>Rejected</span>
+                      ) : u.status === 'deleted' ? (
+                        <span style={{ fontSize: 11, color: 'var(--outer-muted)' }}>Deleted</span>
                       ) : (
                         <>
                           <button

@@ -25,6 +25,14 @@ export class AuthController {
    * the *verify* step afterward, reads as a broken flow: you type your
    * details, wait for a code, enter it, and only then find out it was never
    * going to work.
+   *
+   * The Sign In tab (no `intent`) gets the mirror-image check: a number
+   * that isn't registered at all — never was, or its old account got
+   * deleted and freed up (user-deletion.tx.js) — is rejected right here too,
+   * before any OTP goes out, rather than sending a real code only to reject
+   * it at `otp/verify` afterward once it's entered. Same "don't make them
+   * wait for a code that was never going to work" reasoning as the signup
+   * branch above, just for the opposite condition.
    */
   @Post('otp/request')
   @Params({ 0: Body() })
@@ -34,6 +42,9 @@ export class AuthController {
     if (body.intent === 'signup') {
       const clash = await this.authService.findUserByPhone(phone);
       if (clash) throw new ConflictException('This number is already registered — sign in instead.');
+    } else {
+      const existing = await this.authService.findUserByPhone(phone);
+      if (!existing) throw new NotFoundException('No account found with this number — create an account first.');
     }
     return this.otpService.requestOtp(phone);
   }
@@ -72,6 +83,17 @@ export class AuthController {
     if (body.firstName || body.lastName) {
       const clash = await this.authService.findUserByPhone(phone);
       if (clash) throw new ConflictException('This number is already registered — sign in instead.');
+    } else {
+      // No firstName/lastName means this came from the plain Sign In tab,
+      // not Create account — `findOrCreateUser` below has no other way to
+      // tell "signing in" apart from "signing up" than those two fields
+      // being present, so without this check, signing in with a phone that
+      // isn't actually registered (never was, or its old account got
+      // deleted and freed up — see user-deletion.tx.js) silently created a
+      // brand-new, blank "New Member" row with no name or society instead
+      // of telling the visitor to create an account. Confirmed live.
+      const existing = await this.authService.findUserByPhone(phone);
+      if (!existing) throw new NotFoundException('No account found with this number — create an account first.');
     }
 
     let email = body.emailVerificationToken

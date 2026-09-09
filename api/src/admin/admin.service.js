@@ -7,6 +7,7 @@ import { AuditLogService } from '../common/audit/audit-log.service';
 import { ReportsService } from '../reports/reports.service';
 import { CloudinaryService } from '../uploads/cloudinary.service';
 import { SocietiesService } from '../societies/societies.service';
+import { softDeleteUser } from '../users/user-deletion.tx';
 
 const DEFAULT_SETTINGS = {
   supportEmail: 'support@kitabx.app',
@@ -139,7 +140,7 @@ export class AdminService {
       // Users tab shows this instead of society name, since two members in
       // the same society are otherwise indistinguishable at a glance.
       address: u.address,
-      status: !u.isActive ? 'suspended' : u.verificationStatus === 'PENDING' ? 'pending' : 'active',
+      status: u.deletedAt ? 'deleted' : !u.isActive ? 'suspended' : u.verificationStatus === 'PENDING' ? 'pending' : 'active',
       verified: u.verificationStatus === 'VERIFIED',
       rating: ratingMap.get(u.id) || null,
       credits: creditsMap.get(u.id) || 0,
@@ -147,6 +148,7 @@ export class AdminService {
   }
 
   async setVerification(userId, verified) {
+    await this._assertNotDeleted(userId);
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: { verificationStatus: verified ? 'VERIFIED' : 'PENDING' },
@@ -155,7 +157,19 @@ export class AdminService {
     return user;
   }
 
+  /** A deleted account's `phone`/`email` are tombstoned (see
+   * user-deletion.tx.js) — flipping `isActive`/`verificationStatus` back on
+   * it wouldn't actually restore a working account (the real phone/email
+   * are already freed for a fresh signup), it would just leave a broken
+   * row that looks "Active" in this table but can never log in. Verify and
+   * Suspend/Reactivate are for real, non-deleted accounts only. */
+  async _assertNotDeleted(userId) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { deletedAt: true } });
+    if (user?.deletedAt) throw new BadRequestException('This account has been deleted and can no longer be modified.');
+  }
+
   async setSuspended(userId, suspended, adminId) {
+    await this._assertNotDeleted(userId);
     const user = await this.prisma.user.update({ where: { id: userId }, data: { isActive: !suspended } });
     // §42: this was the one admin-side profile mutation with no
     // notification at all — verification/approve/reject/deletion-rejection
@@ -213,14 +227,16 @@ export class AdminService {
 
   /** Actions the request for real — soft-deletes (matches the `deletedAt`
    * column every admin count/listing query already filters on) and
-   * immediately locks the account out (`JwtAuthGuard` already rejects any
-   * session where `deletedAt` is set), so no separate "disable session" step
-   * is needed. No notification — a deleted account can't sign back in to see one. */
+   * immediately locks the account out (`JwtAuthGuard` rejects any session
+   * where `deletedAt` is set, on every request after this). No notification
+   * — a deleted account can't sign back in to see one. The actual mutation
+   * (`softDeleteUser`) is shared with the 30-day auto-delete cron
+   * (scheduled-tasks/account-deletion-expiry.service.js) — see that file
+   * for why phone/email get tombstoned and listings get paused. */
   async actionDeletionRequest(userId, adminId) {
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: { deletedAt: new Date(), isActive: false },
-    });
+    const existing = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!existing) throw new NotFoundException('User not found');
+    const user = await this.prisma.$transaction((tx) => softDeleteUser(tx, existing));
     await this.auditLog.record({
       actorAdminId: adminId,
       action: 'USER_DELETED',

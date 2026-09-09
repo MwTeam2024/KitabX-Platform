@@ -95,16 +95,11 @@ export default function ProfileSettingsPage() {
     openSheet('Notification preferences', <NotificationPrefs onSave={() => { closeSheet(); showToast('Preferences saved'); }} />);
   };
 
-  const openChatRetention = () => {
-    openSheet('Chat auto-delete', <ChatRetentionPrefs onSave={() => { closeSheet(); showToast('Chat auto-delete updated'); }} />);
-  };
-
   const openDeleteRequest = () => {
     openSheet('Request account deletion', (
       <>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 14 }}>
-          Your society admin reviews deletion requests. Active exchanges must be completed or cancelled first —
-          books already gifted stay with their new owners.
+          Your account will be automatically deleted within 30 days.
         </p>
         <button
           className="btn btn-outline danger"
@@ -203,7 +198,6 @@ export default function ProfileSettingsPage() {
         <Group title="Preferences">
           <Row icon="bell" label="Notifications" value="Manage notification preferences" onClick={openNotificationPrefs} />
           <Row icon="shieldCheck" label="Privacy" value="Manage your privacy settings" onClick={privacy} />
-          <Row icon="trash" label="Chat auto-delete" value="Automatically remove old conversations" onClick={openChatRetention} />
         </Group>
 
         <Group title="Account Actions">
@@ -538,56 +532,3 @@ function LocationChangeForm({ user, onDone }) {
   );
 }
 
-/** Auto-deletes ("delete for me") conversations quiet longer than the chosen window (§14). */
-const RETENTION_OPTIONS = [
-  { value: null, label: 'Never (keep forever)' },
-  { value: 1, label: 'After 1 month of inactivity' },
-  { value: 3, label: 'After 3 months of inactivity' },
-  { value: 6, label: 'After 6 months of inactivity' },
-];
-
-function ChatRetentionPrefs({ onSave }) {
-  const [months, setMonths] = useState(undefined);
-  const showToast = useToast();
-
-  useEffect(() => {
-    usersService.getNotificationPreferences()
-      .then((p) => setMonths(p?.chatRetentionMonths ?? null))
-      .catch(() => setMonths(null));
-  }, []);
-
-  if (months === undefined) return <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Loading…</div>;
-
-  const save = async () => {
-    try {
-      await usersService.updateNotificationPreferences({ chatRetentionMonths: months });
-      onSave();
-    } catch (err) {
-      showToast(err.message || 'Could not save this setting');
-    }
-  };
-
-  return (
-    <>
-      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 12 }}>
-        Conversations with no new messages for longer than this are removed from your Messages list. The other
-        member keeps their own copy either way.
-      </p>
-      <div className="reason-list">
-        {RETENTION_OPTIONS.map((opt) => (
-          <label className="reason-item" key={String(opt.value)}>
-            <input
-              type="radio"
-              name="chat-retention"
-              checked={months === opt.value}
-              onChange={() => setMonths(opt.value)}
-              style={{ width: 16, height: 16, accentColor: 'var(--brand-2)' }}
-            />
-            {opt.label}
-          </label>
-        ))}
-      </div>
-      <button className="btn btn-primary" onClick={save}>Save</button>
-    </>
-  );
-}

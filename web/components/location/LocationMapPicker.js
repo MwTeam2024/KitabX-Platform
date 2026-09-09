@@ -83,33 +83,39 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
         gestureHandling: 'greedy',
       });
       mapRef.current = map;
-      // Covers the visitor dragging the map by hand — a search result or
-      // geolocation fix calls reverseGeocode() directly instead (see
-      // moveTo below) rather than relying on this firing after a
-      // programmatic move.
+      // `idle` fires once on its own right after the map first paints —
+      // for its initial static center/zoom, never a real pan — and then
+      // again for every actual drag after that. Confirmed live that NOT
+      // skipping that first firing was itself a real bug: it reverse-
+      // geocoded wherever the map happened to open (DEFAULT_CENTER, the
+      // literal middle of India, whenever no real saved location existed
+      // yet) and silently committed THAT as the chosen location the
+      // instant the map mounted — before the visitor had touched anything.
+      // If they then typed a real address but submitted before the
+      // separate debounced geocode-that resolved (slow network, or just a
+      // fast submit), the saved address TEXT looked right while the saved
+      // lat/lng stayed pinned to the middle of India — exactly how several
+      // societies in production ended up sitting on top of each other at
+      // (20.5937, 78.9629) regardless of their real city. Only the second
+      // and later `idle` firings are a visitor actually dragging the map
+      // by hand — a search result or geolocation fix calls reverseGeocode()
+      // directly instead (see moveTo below), so this only ever needs to
+      // catch a manual drag.
+      let firstIdleSkipped = false;
       map.addListener('idle', () => {
+        if (!firstIdleSkipped) { firstIdleSkipped = true; return; }
         const c = map.getCenter();
         reverseGeocode(c.lat(), c.lng());
       });
       if (pendingMoveRef.current) {
         // A search was already typed out while the map was still loading —
         // go straight there instead of settling on the map's own default
-        // first-paint position.
+        // first-paint position. This re-centering fires `idle` again
+        // (the second firing, past the skip above), which is exactly the
+        // one that should reverse-geocode this new position.
         const { la, ln } = pendingMoveRef.current;
         map.setCenter({ lat: la, lng: ln });
         pendingMoveRef.current = null;
-      } else if (!hasInitial && !addressRef.current?.trim()) {
-        // The very first `idle` after a map is constructed with a static
-        // center/zoom (nothing external to load) can fire before the
-        // listener above even gets attached, on the same tick as
-        // `new maps.Map()` returning — confirmed live (it never once fired
-        // for the initial center). Geocoding that starting position
-        // explicitly, once, covers that miss. Skipped entirely when there's
-        // already an address (a saved one, or mid-search) — reverse-
-        // geocoding the map's own default center would only overwrite it
-        // with an unrelated result.
-        const startCenter = map.getCenter();
-        reverseGeocode(startCenter.lat(), startCenter.lng());
       }
       setStatus('ready');
     }).catch(() => { if (!cancelled) setStatus('error'); });
@@ -165,9 +171,38 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
         moveTo(pos.coords.latitude, pos.coords.longitude);
       },
       () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 10000 },
+      // Low accuracy on purpose: forcing a GPS-grade fix (enableHighAccuracy)
+      // can take several seconds — sometimes the full timeout — before the
+      // network/WiFi fallback ever kicks in, which is what read as the
+      // button "responding late". A building needs street-level accuracy at
+      // best, and the visitor still drags/types to fine-tune the pin anyway,
+      // so the fast approximate fix is enough and gets something on screen
+      // right away.
+      { enableHighAccuracy: false, timeout: 8000 },
     );
   };
+
+  // Pre-fill with the visitor's/admin's current location the moment a BLANK
+  // picker mounts, so there's already something on the pin before anyone's
+  // touched the field — they can still type, drag the map, search, or hit
+  // the location button above to change it. Only for a genuinely empty
+  // picker (no saved address, no lat/lng): editing an existing address
+  // (society location, profile home address) must never get silently
+  // overwritten by wherever the device happens to be right now. Left
+  // collapsed rather than forced open — moveTo() stashes the fix via
+  // pendingMoveRef and the map picks it up whenever it's actually expanded.
+  useEffect(() => {
+    if (addressRef.current?.trim() || (lat != null && lng != null)) return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => moveTo(pos.coords.latitude, pos.coords.longitude),
+      () => {}, // silently ignore — picker just stays blank, same as before this existed
+      { enableHighAccuracy: false, timeout: 8000 }, // fast approximate fix — see useCurrentLocation above for why
+    );
+    // Mount-only: a deliberate one-time attempt on the picker's initial
+    // (empty) state, not something that should re-fire as the visitor types.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="field">
@@ -191,7 +226,7 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
           disabled={locating}
           title="Use my current location"
         >
-          <Icon name="mapPin" style={{ width: 14, height: 14 }} />
+          {locating ? <span className="locate-spinner" /> : <Icon name="mapPin" style={{ width: 14, height: 14 }} />}
         </button>
       </div>
 

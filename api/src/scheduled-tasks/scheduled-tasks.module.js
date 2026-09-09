@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { RequestExpiryService } from './request-expiry.service';
+import { AccountDeletionExpiryService } from './account-deletion-expiry.service';
 // Chat is switched off for now — see chat.module.js. These two cron jobs
 // are chat-only (retention cleanup + auto-disabling old conversations), so
 // they're commented out entirely along with the module they depend on.
@@ -10,6 +11,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [NotificationsModule /* , ChatModule */],
-  providers: [RequestExpiryService /* , ChatRetentionService, ExchangeChatDisableService */],
+  providers: [RequestExpiryService, AccountDeletionExpiryService /* , ChatRetentionService, ExchangeChatDisableService */],
 })
 export class ScheduledTasksModule {}
