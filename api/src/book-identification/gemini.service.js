@@ -70,6 +70,14 @@ export class GeminiService {
           // best single read, not creative variation) and converges faster.
           temperature: 0.1,
           maxOutputTokens: 2048,
+          // gemini-3.6-flash thinks by default (it can't be turned off
+          // entirely — thinkingBudget: 0 is rejected as invalid for this
+          // model) — confirmed live that left at its default this single
+          // call took over 13 seconds for what is, at bottom, a straight
+          // vision-recognition task rather than something needing deep
+          // chain-of-thought. Capping it to LOW cut that to ~3 seconds with
+          // no code-visible change in output quality on the same test image.
+          thinkingConfig: { thinkingLevel: 'LOW' },
         },
       }),
     });

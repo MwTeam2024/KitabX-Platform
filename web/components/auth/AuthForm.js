@@ -74,7 +74,10 @@ export default function AuthForm({ initialTab = 'signup' }) {
   const [sending, setSending] = useState(false);
   const [signupCode, setSignupCode] = useState('');
   const [signupBusy, setSignupBusy] = useState(false);
-  const [signupSeconds, setSignupSeconds] = useState(0);
+  // Per-channel, not a single shared timer — WhatsApp and email have
+  // independent resend cooldowns on the backend (keyed by phone vs email),
+  // so sending one must never make the OTHER channel look/be blocked.
+  const [signupCooldowns, setSignupCooldowns] = useState({ whatsapp: 0, email: 0 });
 
   // Sign-in: one merged field, channel detected from what was typed — kept
   // as-is (unlike signup, sign-in only ever needs the one identifier the
@@ -87,10 +90,15 @@ export default function AuthForm({ initialTab = 'signup' }) {
   const [signinSeconds, setSigninSeconds] = useState(0);
 
   useEffect(() => {
-    if (signupSeconds <= 0) return;
-    const timer = setTimeout(() => setSignupSeconds((s) => s - 1), 1000);
+    if (!signupCooldowns.whatsapp && !signupCooldowns.email) return;
+    const timer = setTimeout(() => {
+      setSignupCooldowns((c) => ({
+        whatsapp: Math.max(0, c.whatsapp - 1),
+        email: Math.max(0, c.email - 1),
+      }));
+    }, 1000);
     return () => clearTimeout(timer);
-  }, [signupSeconds]);
+  }, [signupCooldowns]);
 
   useEffect(() => {
     if (signinSeconds <= 0) return;
@@ -134,6 +142,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
   });
 
   const chooseChannel = async (ch) => {
+    if (signupCooldowns[ch] > 0) return;
     setSending(true);
     try {
       if (ch === 'whatsapp') {
@@ -144,7 +153,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
       setChannel(ch);
       setSignupStep('otp');
       setSignupCode('');
-      setSignupSeconds(RESEND_SECONDS);
+      setSignupCooldowns((c) => ({ ...c, [ch]: RESEND_SECONDS }));
     } catch (err) {
       showToast(err.message || 'Could not send the code — try again');
     } finally {
@@ -157,7 +166,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
       const result = channel === 'whatsapp'
         ? await authService.requestOtp(form.whatsapp.trim(), { intent: 'signup' })
         : await authService.requestSignupEmailOtp(form.email.trim());
-      setSignupSeconds(RESEND_SECONDS);
+      setSignupCooldowns((c) => ({ ...c, [channel]: RESEND_SECONDS }));
       // TEMPORARY — while devCode is exposed for testing, its own toast
       // (api-client.js) already confirms a fresh one was sent; a second
       // toast right behind it would overwrite the code before it's readable.
@@ -350,17 +359,21 @@ export default function AuthForm({ initialTab = 'signup' }) {
             </NoteBox>
             <button
               className="btn btn-primary" style={{ marginBottom: 10 }}
-              disabled={sending} onClick={() => chooseChannel('whatsapp')}
+              disabled={sending || signupCooldowns.whatsapp > 0} onClick={() => chooseChannel('whatsapp')}
             >
               <span className="icb"><Icon name="phone" style={{ width: 13, height: 13 }} /></span>
-              {sending ? 'Sending…' : `WhatsApp — ${form.whatsapp}`}
+              {signupCooldowns.whatsapp > 0
+                ? `Wait 0:${String(signupCooldowns.whatsapp).padStart(2, '0')} to resend`
+                : sending ? 'Sending…' : `WhatsApp — ${form.whatsapp}`}
             </button>
             <button
               className="btn btn-outline" style={{ marginBottom: 16 }}
-              disabled={sending} onClick={() => chooseChannel('email')}
+              disabled={sending || signupCooldowns.email > 0} onClick={() => chooseChannel('email')}
             >
               <Icon name="mail" style={{ width: 15, height: 15 }} />
-              {sending ? 'Sending…' : `Email — ${form.email}`}
+              {signupCooldowns.email > 0
+                ? `Wait 0:${String(signupCooldowns.email).padStart(2, '0')} to resend`
+                : sending ? 'Sending…' : `Email — ${form.email}`}
             </button>
             <button className="btn btn-outline" onClick={() => setSignupStep('form')}>
               Back
@@ -376,9 +389,9 @@ export default function AuthForm({ initialTab = 'signup' }) {
             <OtpInput value={signupCode} onChange={setSignupCode} />
             <button
               className="link-green" style={{ margin: '10px 0 16px' }}
-              onClick={resendSignupOtp} disabled={signupSeconds > 0}
+              onClick={resendSignupOtp} disabled={signupCooldowns[channel] > 0}
             >
-              {signupSeconds > 0 ? `Resend code in 0:${String(signupSeconds).padStart(2, '0')}` : 'Resend code'}
+              {signupCooldowns[channel] > 0 ? `Resend code in 0:${String(signupCooldowns[channel]).padStart(2, '0')}` : 'Resend code'}
             </button>
             <button className="btn btn-primary" disabled={signupBusy || signupCode.length < 6} onClick={verifySignupOtp}>
               <span className="icb"><Icon name="check" style={{ width: 12, height: 12 }} /></span>
