@@ -90,7 +90,11 @@ export default function AuthForm({ initialTab = 'signup' }) {
   // code. 'otp' — enter that code, still on this same step.
   const [signupStep, setSignupStep] = useState('form');
   const [channel, setChannel] = useState(null); // 'whatsapp' | 'email'
-  const [sending, setSending] = useState(false);
+  // Which channel button is mid-send, not just a shared boolean — both
+  // buttons read from the same flag before this, so tapping WhatsApp made
+  // the Email button show "Sending…" too even though nothing was happening
+  // on that one. null | 'whatsapp' | 'email'.
+  const [sendingChannel, setSendingChannel] = useState(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [signupCode, setSignupCode] = useState('');
   const [signupBusy, setSignupBusy] = useState(false);
@@ -177,7 +181,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
 
   const chooseChannel = async (ch) => {
     if (signupCooldowns[ch] > 0) return;
-    setSending(true);
+    setSendingChannel(ch);
     try {
       if (ch === 'whatsapp') {
         await authService.requestOtp(form.whatsapp.trim(), { intent: 'signup' });
@@ -191,7 +195,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
     } catch (err) {
       showToast(err.message || 'Could not send the code — try again');
     } finally {
-      setSending(false);
+      setSendingChannel(null);
     }
   };
 
@@ -372,7 +376,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
 
             <TermsGate checked={accepted} onChange={setAccepted} />
 
-            <button className="btn btn-primary" disabled={!accepted || sending || checkingAvailability} onClick={goToChannelStep}>
+            <button className="btn btn-primary" disabled={!accepted || !!sendingChannel || checkingAvailability} onClick={goToChannelStep}>
               <span className="icb"><Icon name="arrowRight" style={{ width: 13, height: 13 }} /></span>
               {checkingAvailability ? 'Checking…' : 'Continue'}
             </button>
@@ -393,21 +397,21 @@ export default function AuthForm({ initialTab = 'signup' }) {
             </NoteBox>
             <button
               className="btn btn-primary" style={{ marginBottom: 10 }}
-              disabled={sending || signupCooldowns.whatsapp > 0} onClick={() => chooseChannel('whatsapp')}
+              disabled={!!sendingChannel || signupCooldowns.whatsapp > 0} onClick={() => chooseChannel('whatsapp')}
             >
               <span className="icb"><Icon name="phone" style={{ width: 13, height: 13 }} /></span>
               {signupCooldowns.whatsapp > 0
                 ? `Wait 0:${String(signupCooldowns.whatsapp).padStart(2, '0')} to resend`
-                : sending ? 'Sending…' : `WhatsApp — ${form.whatsapp}`}
+                : sendingChannel === 'whatsapp' ? 'Sending…' : `WhatsApp — ${form.whatsapp}`}
             </button>
             <button
               className="btn btn-outline" style={{ marginBottom: 16 }}
-              disabled={sending || signupCooldowns.email > 0} onClick={() => chooseChannel('email')}
+              disabled={!!sendingChannel || signupCooldowns.email > 0} onClick={() => chooseChannel('email')}
             >
               <Icon name="mail" style={{ width: 15, height: 15 }} />
               {signupCooldowns.email > 0
                 ? `Wait 0:${String(signupCooldowns.email).padStart(2, '0')} to resend`
-                : sending ? 'Sending…' : `Email — ${form.email}`}
+                : sendingChannel === 'email' ? 'Sending…' : `Email — ${form.email}`}
             </button>
             <button className="btn btn-outline" onClick={() => setSignupStep('form')}>
               Back
