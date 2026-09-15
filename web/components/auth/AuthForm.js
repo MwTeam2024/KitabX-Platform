@@ -91,6 +91,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
   const [signupStep, setSignupStep] = useState('form');
   const [channel, setChannel] = useState(null); // 'whatsapp' | 'email'
   const [sending, setSending] = useState(false);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [signupCode, setSignupCode] = useState('');
   const [signupBusy, setSignupBusy] = useState(false);
   // Per-channel, not a single shared timer — WhatsApp and email have
@@ -142,9 +143,22 @@ export default function AuthForm({ initialTab = 'signup' }) {
     return null;
   };
 
-  const goToChannelStep = () => {
+  const goToChannelStep = async () => {
     const error = validateSignupForm();
     if (error) return showToast(error);
+    // Checked here, not just at the per-channel OTP-request step below —
+    // so an already-registered email or WhatsApp number is caught the
+    // instant "Continue" is tapped, before any OTP is ever sent, rather
+    // than after picking a channel and waiting on a real code that was
+    // never going to work.
+    setCheckingAvailability(true);
+    try {
+      await authService.checkSignupAvailability(form.whatsapp.trim(), form.email.trim());
+    } catch (err) {
+      return showToast(err.message || 'Could not check that — try again');
+    } finally {
+      setCheckingAvailability(false);
+    }
     setSignupStep('channel');
   };
 
@@ -358,9 +372,9 @@ export default function AuthForm({ initialTab = 'signup' }) {
 
             <TermsGate checked={accepted} onChange={setAccepted} />
 
-            <button className="btn btn-primary" disabled={!accepted || sending} onClick={goToChannelStep}>
+            <button className="btn btn-primary" disabled={!accepted || sending || checkingAvailability} onClick={goToChannelStep}>
               <span className="icb"><Icon name="arrowRight" style={{ width: 13, height: 13 }} /></span>
-              Continue
+              {checkingAvailability ? 'Checking…' : 'Continue'}
             </button>
 
             <div className="or-div">OR</div>

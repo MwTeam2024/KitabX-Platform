@@ -1,6 +1,11 @@
 import { apiClient } from "@/lib/api-client";
 
 export const authService = {
+  /** Signup's "Continue" step — checks both fields against existing accounts
+   * without sending any OTP/SMS/email. Throws (409) with the same
+   * "already registered — sign in instead" message the later per-channel
+   * checks use if either is taken. */
+  checkSignupAvailability: (phone, email) => apiClient.post("/auth/signup/check-availability", { phone, email }),
   requestOtp: (phone, opts = {}) => apiClient.post("/auth/otp/request", { phone, ...opts }),
   /** `profile` carries the signup fields (firstName, lastName, societyId, blockId,
    * flatUnit, acceptedTerms) — ignored by the backend for an existing phone. */

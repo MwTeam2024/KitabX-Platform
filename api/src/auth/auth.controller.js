@@ -18,6 +18,29 @@ export class AuthController {
   }
 
   /**
+   * Signup's "Continue" button (before the WhatsApp/email channel choice
+   * even shows) — checks both fields against existing accounts without
+   * sending any OTP, SMS, or email. Same conflict message/behavior as the
+   * later per-channel checks below (`otp/request`'s intent:'signup' branch,
+   * `otp/verify-email-signup`), just moved earlier: a member who already
+   * has an account now finds out at the very first "Continue" tap, not
+   * after picking a channel and waiting on a real code that was never
+   * going to work.
+   */
+  @Post('signup/check-availability')
+  @Params({ 0: Body() })
+  async checkSignupAvailability(body) {
+    required(body, ['phone', 'email']);
+    const phone = normalizePhone(body.phone);
+    const email = normalizeEmail(body.email);
+    const phoneClash = await this.authService.findUserByPhone(phone);
+    if (phoneClash) throw new ConflictException('This number is already registered — sign in instead.');
+    const emailClash = await this.authService.findUserByEmail(email);
+    if (emailClash) throw new ConflictException('This email is already registered — sign in instead.');
+    return { available: true };
+  }
+
+  /**
    * `intent: 'signup'` (sent only by the Create Account tab, same convention
    * as `otp/request-email` below) blocks an already-registered number before
    * any code is even sent — confirmed live that generating and delivering an
