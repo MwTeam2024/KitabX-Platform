@@ -402,7 +402,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
               <span className="icb"><Icon name="phone" style={{ width: 13, height: 13 }} /></span>
               {signupCooldowns.whatsapp > 0
                 ? `Wait 0:${String(signupCooldowns.whatsapp).padStart(2, '0')} to resend`
-                : sendingChannel === 'whatsapp' ? 'Sending…' : `WhatsApp — ${form.whatsapp}`}
+                : sendingChannel === 'whatsapp' ? 'Sending…' : `SMS — ${form.whatsapp}`}
             </button>
             <button
               className="btn btn-outline" style={{ marginBottom: 16 }}
