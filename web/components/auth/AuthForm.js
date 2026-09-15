@@ -17,6 +17,25 @@ import { authService } from '@/services/auth.service';
 const RESEND_SECONDS = 30;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Mirrors the backend's normalizePhone (apps/api/src/common/validate.js) —
+ * on the email-signup path, the WhatsApp number is only ever checked there,
+ * as the very last step (signup/complete-with-email), by which point the
+ * email OTP has already been consumed. A blank-only check here let a
+ * malformed number sail all the way through the email-verify step only to
+ * fail with "Enter a valid phone number" after the code was already burned
+ * — any retry then hit "Code expired" even well inside the 5-minute window.
+ * Confirmed live. Validating the actual shape up front, before any OTP is
+ * ever sent, keeps a bad number from starting that chain at all.
+ */
+function isValidPhone(value) {
+  const trimmed = (value || '').trim();
+  if (trimmed.startsWith('+')) return trimmed.slice(1).replace(/\D/g, '').length >= 10;
+  let digits = trimmed.replace(/\D/g, '').replace(/^0+/, '');
+  if (digits.length > 10 && digits.startsWith('91')) digits = digits.slice(2).replace(/^0+/, '');
+  return digits.length === 10;
+}
+
 const HEADINGS = {
   signup: { title: 'Join your society', sub: 'Read. Exchange. Repeat.' },
   signin: { title: 'Welcome back!', sub: 'Glad to see you again.' },
@@ -113,6 +132,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
     if (!form.lastName.trim()) return 'Enter your last name';
     if (!form.email.trim() || !EMAIL_RE.test(form.email.trim())) return 'Enter a valid email address';
     if (!form.whatsapp.trim()) return 'Enter your WhatsApp number';
+    if (!isValidPhone(form.whatsapp)) return 'Enter a valid 10-digit WhatsApp number';
     if (!form.address?.trim()) return 'Enter your address';
     if (!form.cityText?.trim()) return 'Enter your city';
     if (!form.societyId && !(form.locationRequest?.cityName?.trim() && form.locationRequest?.societyName?.trim())) {
