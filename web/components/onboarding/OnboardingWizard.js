@@ -89,11 +89,11 @@ export default function OnboardingWizard() {
             <div className="field-row">
               <div className="field">
                 <label htmlFor="ob-first">First Name</label>
-                <input id="ob-first" value={form.firstName} placeholder="Priya" onChange={(e) => patch({ firstName: e.target.value })} />
+                <input id="ob-first" autoComplete="off" value={form.firstName} placeholder="Priya" onChange={(e) => patch({ firstName: e.target.value })} />
               </div>
               <div className="field">
                 <label htmlFor="ob-last">Last Name</label>
-                <input id="ob-last" value={form.lastName} placeholder="Sharma" onChange={(e) => patch({ lastName: e.target.value })} />
+                <input id="ob-last" autoComplete="off" value={form.lastName} placeholder="Sharma" onChange={(e) => patch({ lastName: e.target.value })} />
               </div>
             </div>
           </>

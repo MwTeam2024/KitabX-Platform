@@ -345,12 +345,12 @@ export default function AuthForm({ initialTab = 'signup' }) {
               <NamedField
                 id="first-name" label="First Name" icon="user"
                 value={form.firstName} onChange={(v) => patch({ firstName: v })}
-                placeholder="Priya"
+                placeholder="Priya" autoComplete="off"
               />
               <NamedField
                 id="last-name" label="Last Name" icon="user"
                 value={form.lastName} onChange={(v) => patch({ lastName: v })}
-                placeholder="Sharma"
+                placeholder="Sharma" autoComplete="off"
               />
             </div>
             <NamedField
@@ -487,7 +487,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
   );
 }
 
-function NamedField({ id, label, icon, value, onChange, placeholder, type = 'text', inputMode }) {
+function NamedField({ id, label, icon, value, onChange, placeholder, type = 'text', inputMode, autoComplete }) {
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
@@ -498,6 +498,7 @@ function NamedField({ id, label, icon, value, onChange, placeholder, type = 'tex
           className="has-badge"
           type={type}
           inputMode={inputMode}
+          autoComplete={autoComplete}
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
