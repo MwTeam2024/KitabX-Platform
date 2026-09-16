@@ -10,11 +10,11 @@ import { useToast } from '@/components/ui/ToastProvider';
 import { timeAgo } from '@/lib/dates';
 
 const RULES = [
-  { title: '📖 List a book', body: <>You receive a <b>pending</b> credit as soon as you list a book.</> },
-  { title: '✅ Give it away', body: <>Once the handover is verified, your pending credit becomes <b>available</b> to spend.</> },
+  { title: '📖 List a book', body: <>You receive 1 <b>available</b> credit the instant you list a book — spendable right away.</> },
   { title: '🤝 Request a book', body: <>Requesting another book <b>reserves</b> 1 credit from your available balance.</> },
   { title: '📥 Receive a book', body: <>Once that handover is verified, the reserved credit is permanently <b>deducted</b>.</> },
   { title: '↩️ Rejected, cancelled or expired', body: <>Any reserved credit tied to that request is <b>released</b> back to your available balance automatically.</> },
+  { title: '🗑️ Removing your own listing', body: <>Withdraws the credit it granted — but only while it's still unspent. If you've already used it (or more) requesting books, you can't remove that many listings until those exchanges are completed.</> },
 ];
 
 /**
@@ -50,7 +50,6 @@ export default function CreditsPage() {
       <div className="app-scroll pad-nav" style={{ padding: 16 }}>
         <div className="card" style={{ display: 'flex', padding: 0, overflow: 'hidden', marginBottom: 20 }}>
           <Balance value={credits.available} label="Available" color="var(--brand-2)" divider />
-          <Balance value={credits.pending} label="Pending" color="var(--gold-deep)" divider />
           <Balance value={credits.reserved} label="Reserved" color="var(--sindoor)" />
         </div>
 

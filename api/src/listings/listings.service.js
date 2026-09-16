@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { toBookListingLocation, toPublicUser } from '../common/serializers/user.serializer';
-import { grantPendingCredit, reversePendingCredit } from '../credits/credits.tx';
+import { grantAvailableCredit, reverseAvailableCredit } from '../credits/credits.tx';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CloudinaryService } from '../uploads/cloudinary.service';
 
@@ -72,7 +72,7 @@ export class ListingsService {
         });
       }
 
-      await grantPendingCredit(tx, { userId: ownerId, referenceId: listing.id, bookTitle: book.title });
+      await grantAvailableCredit(tx, { userId: ownerId, referenceId: listing.id, bookTitle: book.title });
 
       const full = await tx.bookListing.findUnique({ where: { id: listing.id }, include: LISTING_INCLUDE });
       const dto = this._toDto(full, { isMine: true });
@@ -222,14 +222,34 @@ export class ListingsService {
       throw new BadRequestException('This listing has an active or completed exchange and cannot be removed');
     }
 
+    // Listing grants a credit the instant it's published — spendable right
+    // away, before the book is ever actually given to anyone (see
+    // grantAvailableCredit). Removing the listing claws that credit back
+    // (below), but only as long as it's still free: once it's been spent —
+    // reserved against an outgoing request of this member's own — there's
+    // nothing left to reclaim, so the removal itself has to wait until those
+    // requests resolve (handed over, declined, cancelled or expired all
+    // release the reservation the normal way) rather than letting the
+    // member walk away having already spent credit a deleted listing never
+    // really backed.
+    const account = await this.prisma.creditAccount.findUnique({ where: { userId: ownerId } });
+    if (!account || account.availableBalance < 1) {
+      // This only ever fires once availableBalance has hit 0 — each
+      // successful removal decrements it, and that's the only way in here —
+      // so there's never a positive count of "still allowed" to quote; the
+      // message says so plainly instead of an always-zero number.
+      const requested = account?.reservedBalance || 0;
+      throw new BadRequestException(
+        `You cannot remove books because you have already requested ${requested} `
+        + `book${requested === 1 ? '' : 's'}. The remaining books cannot be removed until the associated exchanges are completed.`,
+      );
+    }
+
     const photos = await this.prisma.bookListingPhoto.findMany({ where: { listingId: id } });
 
     await this.prisma.$transaction(async (tx) => {
       await tx.bookListing.update({ where: { id }, data: { status: 'REMOVED', removedAt: new Date() } });
-      // The pending credit only exists if it hasn't already been converted by
-      // a completed handover — REMOVED is blocked above once that's true, so
-      // this is always safe to reverse.
-      await reversePendingCredit(tx, { userId: ownerId, referenceId: id, bookTitle: listing.book.title });
+      await reverseAvailableCredit(tx, { userId: ownerId, referenceId: id, bookTitle: listing.book.title });
     });
 
     await Promise.all(photos.map((p) => this.cloudinary.deleteImage(p.imageUrl)));

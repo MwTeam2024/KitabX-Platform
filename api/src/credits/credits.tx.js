@@ -15,34 +15,22 @@ async function logTransaction(tx, { userId, type, amount, status = 'COMPLETED', 
   });
 }
 
-/** §10: listing a book earns a pending credit — not spendable until given. */
-export async function grantPendingCredit(tx, { userId, referenceId, bookTitle }) {
-  await tx.creditAccount.update({ where: { userId }, data: { pendingBalance: { increment: 1 } } });
+/** §10 (revised): listing a book earns a credit that's spendable immediately
+ * — no longer held as "pending" until the book is actually given away. A
+ * member can request other books using credit from listings they haven't
+ * handed over yet; `removeListing`'s availableBalance check (listings.
+ * service.js) is what stops that from being farmed for free (list, spend,
+ * delete the listing) — see reverseAvailableCredit below. */
+export async function grantAvailableCredit(tx, { userId, referenceId, bookTitle }) {
+  await tx.creditAccount.update({ where: { userId }, data: { availableBalance: { increment: 1 } } });
   await logTransaction(tx, {
     userId,
     type: 'BOOK_LISTED',
     amount: 1,
-    status: 'PENDING',
+    status: 'COMPLETED',
     referenceType: 'book_listing',
     referenceId,
     description: `Listed "${bookTitle}"`,
-  });
-}
-
-/** §10: verified handover moves the giver's pending credit into available. */
-export async function movePendingToAvailable(tx, { userId, referenceId, bookTitle, otherPartyName }) {
-  await tx.creditAccount.update({
-    where: { userId },
-    data: { pendingBalance: { decrement: 1 }, availableBalance: { increment: 1 } },
-  });
-  await logTransaction(tx, {
-    userId,
-    type: 'BOOK_GIVEN',
-    amount: 1,
-    status: 'COMPLETED',
-    referenceType: 'exchange',
-    referenceId,
-    description: `Gave "${bookTitle}"${otherPartyName ? ` to ${otherPartyName}` : ''}`,
   });
 }
 
@@ -95,10 +83,14 @@ export async function releaseReservedCredit(tx, { userId, referenceId, reason, b
   });
 }
 
-/** Removing a listing that was never handed over withdraws its pending credit
- * — otherwise a member could list, delete, relist and inflate their balance. */
-export async function reversePendingCredit(tx, { userId, referenceId, bookTitle }) {
-  await tx.creditAccount.update({ where: { userId }, data: { pendingBalance: { decrement: 1 } } });
+/** Removing a listing that was never handed over withdraws the credit it
+ * granted — otherwise a member could list, spend the credit, delete the
+ * listing, and keep both the credit's worth and the listing gone. Callers
+ * (listings.service.js#removeListing) must check availableBalance >= 1
+ * first — this only decrements, it never blocks, since by the time this
+ * runs the removal is already decided to go ahead. */
+export async function reverseAvailableCredit(tx, { userId, referenceId, bookTitle }) {
+  await tx.creditAccount.update({ where: { userId }, data: { availableBalance: { decrement: 1 } } });
   await logTransaction(tx, {
     userId,
     type: 'BOOK_LISTED',

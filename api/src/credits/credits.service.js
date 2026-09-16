@@ -22,7 +22,6 @@ export class CreditsService {
     });
     return {
       available: account.availableBalance,
-      pending: account.pendingBalance,
       reserved: account.reservedBalance,
     };
   }

@@ -53,7 +53,7 @@ export function AppDataProvider({ children }) {
   const [books, setBooks] = useState({});
   const [discoveryKeys, setDiscoveryKeys] = useState([]);
   const [wishlist, setWishlist] = useState([]);
-  const [credits, setCredits] = useState({ available: 0, pending: 0, reserved: 0 });
+  const [credits, setCredits] = useState({ available: 0, reserved: 0 });
   const [creditHistory, setCreditHistory] = useState([]);
   const [exchanges, setExchanges] = useState([]);
   const [chatThreads, setChatThreads] = useState([]);

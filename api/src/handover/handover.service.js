@@ -12,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 // Chat is switched off for now — see chat.module.js.
 // import { ChatService } from '../chat/chat.service';
-import { deductReservedCredit, movePendingToAvailable } from '../credits/credits.tx';
+import { deductReservedCredit } from '../credits/credits.tx';
 
 const OTP_TTL_MINUTES = 15;
 const MAX_ATTEMPTS = 5;
@@ -85,12 +85,10 @@ export class HandoverService {
       await tx.bookRequest.update({ where: { id: exchange.requestId }, data: { status: 'COMPLETED' } });
       await tx.bookListing.update({ where: { id: exchange.listingId }, data: { status: 'COMPLETED' } });
 
-      await movePendingToAvailable(tx, {
-        userId: exchange.ownerId,
-        referenceId: exchangeId,
-        bookTitle: exchange.listing.book.title,
-        otherPartyName: exchange.receiver.name,
-      });
+      // The giver's credit was already granted (and spendable) the moment
+      // they listed this book — see grantAvailableCredit — so there's
+      // nothing to move into their balance now; only the receiver's
+      // reserved credit is permanently spent by completing the exchange.
       await deductReservedCredit(tx, {
         userId: exchange.receiverId,
         referenceId: exchangeId,
@@ -102,7 +100,7 @@ export class HandoverService {
         userId: exchange.ownerId,
         type: 'EXCHANGE',
         title: 'Handover verified!',
-        body: `1 credit is now available — "${exchange.listing.book.title}" is on its way to ${exchange.receiver.name}. You can rate the exchange now.`,
+        body: `"${exchange.listing.book.title}" is on its way to ${exchange.receiver.name}. You can rate the exchange now.`,
         entityType: 'exchange',
         entityId: exchange.requestId,
       });

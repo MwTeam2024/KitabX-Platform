@@ -30,10 +30,6 @@ export default function CreditDropdown() {
             <div className="text-[10px] text-[var(--text-muted)]">Available</div>
           </div>
           <div className="flex-1 text-center">
-            <div className="font-display text-[21px] font-bold text-[var(--gold-deep)]">{credits.pending}</div>
-            <div className="text-[10px] text-[var(--text-muted)]">Pending</div>
-          </div>
-          <div className="flex-1 text-center">
             <div className="font-display text-[21px] font-bold text-[var(--sindoor)]">{credits.reserved}</div>
             <div className="text-[10px] text-[var(--text-muted)]">Reserved</div>
           </div>
