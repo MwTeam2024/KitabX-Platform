@@ -21,8 +21,16 @@ export function BookCover({ book, className = '', style, showAuthor = false, tit
   if (src) {
     return <div className={`bcov ${className}`} style={{ ...style, padding: 0, overflow: 'hidden' }}><RealPhoto src={cldThumb(src, { w: 240 })} /></div>;
   }
+  // `.bcov`'s `12% 8%` padding is a CSS percentage, which resolves against the
+  // *flex container's* width, not this box's own — harmless at the ~150px
+  // preview size, but it blows a 40px list-row thumbnail up to ~120px. Pin it
+  // in px off the requested width (same ratio) whenever one is given.
+  const width = typeof style?.width === 'number' ? style.width : null;
+  const placeholderStyle = width
+    ? { ...style, padding: `${Math.round(width * 0.12)}px ${Math.round(width * 0.08)}px` }
+    : style;
   return (
-    <div className={`bcov ${book.cov} ${className}`} style={style}>
+    <div className={`bcov ${book.cov} ${className}`} style={placeholderStyle}>
       {book.em && <div className="bcov-emblem">{book.em}</div>}
       <div className="bcov-title" style={titleSize ? { fontSize: titleSize } : undefined}>
         {book.title}

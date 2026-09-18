@@ -498,8 +498,10 @@ export function AppDataProvider({ children }) {
     refreshBooks, refreshMyBooks, searchBooks, ensureBookDetail, refreshCredits, deleteCreditTransaction, clearCreditHistory,
     isWishlisted, toggleWishlist, refreshWishlist,
     requestBook, cancelBookRequest,
-    publishBook: async (payload) => {
-      const dto = await listingsService.create(toListingPayload(payload));
+    publishBook: async (payload, { confirmDuplicate } = {}) => {
+      const listingPayload = toListingPayload(payload);
+      if (confirmDuplicate) listingPayload.confirmDuplicate = true;
+      const dto = await listingsService.create(listingPayload);
       await Promise.all([refreshMyBooks(), refreshCredits()]);
       return dto.key;
     },

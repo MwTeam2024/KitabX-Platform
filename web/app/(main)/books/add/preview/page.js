@@ -8,6 +8,21 @@ import { BookCover } from '@/components/books/BookCover';
 import { coverForDraft, useBookDraft } from '@/contexts/BookDraftContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/components/ui/ToastProvider';
+import { useSheet } from '@/components/ui/SheetProvider';
+
+function DuplicateListingConfirm({ onConfirm, onCancel }) {
+  return (
+    <>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '-8px 0 16px' }}>
+        You already have this book listed. If you have another physical copy to give away, you can list it again.
+      </div>
+      <button className="btn btn-primary" onClick={onConfirm} style={{ marginBottom: 8 }}>
+        Yes, I have another copy
+      </button>
+      <button className="btn btn-outline" onClick={onCancel}>Cancel</button>
+    </>
+  );
+}
 
 /**
  * Screen 10 — preview then publish. Listing earns a *pending* credit; it only
@@ -18,32 +33,55 @@ export default function PreviewListingPage() {
   const showToast = useToast();
   const { publishBook, editListing } = useAppData();
   const { draft, resetDraft } = useBookDraft();
+  const { openSheet, closeSheet } = useSheet();
   const [saving, setSaving] = useState(false);
 
   const { cov, em } = coverForDraft(draft);
   const previewBook = { ...draft, cov, em };
   const editing = !!draft.editKey;
 
-  const publish = async () => {
+  const doPublish = async (opts) => {
     setSaving(true);
     try {
-      if (editing) {
-        await editListing(draft.editKey, draft);
-        const key = draft.editKey;
-        resetDraft();
-        showToast('Listing updated');
-        return router.push(`/books/${key}`);
-      }
-
-      await publishBook(draft);
+      await publishBook(draft, opts);
       resetDraft();
       showToast("Listed! Credit lands once it's handed over 📖");
       router.push('/books');
     } catch (err) {
+      if (!opts?.confirmDuplicate && err.status === 409) {
+        openSheet(
+          'Already listed',
+          <DuplicateListingConfirm
+            onConfirm={() => { closeSheet(); doPublish({ confirmDuplicate: true }); }}
+            onCancel={closeSheet}
+          />,
+        );
+        return;
+      }
       showToast(err.message || 'Could not publish this listing — try again');
     } finally {
       setSaving(false);
     }
+  };
+
+  const publish = async () => {
+    if (editing) {
+      setSaving(true);
+      try {
+        await editListing(draft.editKey, draft);
+        const key = draft.editKey;
+        resetDraft();
+        showToast('Listing updated');
+        router.push(`/books/${key}`);
+      } catch (err) {
+        showToast(err.message || 'Could not save changes — try again');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    await doPublish();
   };
 
   return (

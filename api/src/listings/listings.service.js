@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Dependencies,
   ForbiddenException,
   Injectable,
@@ -46,6 +47,18 @@ export class ListingsService {
 
     return this.prisma.$transaction(async (tx) => {
       const book = await this._findOrCreateBookTx(tx, payload.book);
+
+      // Block re-listing a book the owner already has live, unless they've
+      // confirmed (via the frontend's "do you have another copy?" prompt)
+      // that this is a genuinely separate physical copy.
+      if (!payload.confirmDuplicate) {
+        const existingListing = await tx.bookListing.findFirst({
+          where: { bookId: book.id, ownerId, status: { in: ['ACTIVE', 'PAUSED', 'RESERVED'] } },
+        });
+        if (existingListing) {
+          throw new ConflictException('You already have this book listed.');
+        }
+      }
 
       const listing = await tx.bookListing.create({
         data: {
@@ -98,6 +111,19 @@ export class ListingsService {
     if (isbn13 || isbn10) {
       const existing = await tx.book.findFirst({
         where: { OR: [isbn13 ? { isbn13 } : undefined, isbn10 ? { isbn10 } : undefined].filter(Boolean) },
+      });
+      if (existing) return existing;
+    } else {
+      // No ISBN to key off (common for older/obscure titles Google Books
+      // itself has no ISBN for). Without this, the same ISBN-less book
+      // picked twice from title/author search would silently create a
+      // second `Book` row each time, and the same-listing check below
+      // (keyed on bookId) would never catch the repeat. Also matching on
+      // publicationYear (when the caller supplies one) keeps two genuinely
+      // different, equally ISBN-less editions of the same title/author from
+      // wrongly collapsing into one Book row.
+      const existing = await tx.book.findFirst({
+        where: { title: bookData.title, author: bookData.author, publicationYear: bookData.publicationYear },
       });
       if (existing) return existing;
     }
