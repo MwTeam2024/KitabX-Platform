@@ -153,7 +153,11 @@ export default function BulkUploadPage() {
               resizeOptions={{ maxWidth: 1600, quality: 0.85 }}
               capture={false}
             />
-            <NoteBox icon="info" style={{ marginTop: 14 }}>
+            <NoteBox icon="camera" style={{ marginTop: 14 }}>
+              Take the photo straight-on from above, with all books kept close together — this
+              helps our AI detect every title accurately.
+            </NoteBox>
+            <NoteBox icon="info" style={{ marginTop: 10 }}>
               You&apos;ll review every detected book and can edit or remove any before publishing.
             </NoteBox>
           </>
