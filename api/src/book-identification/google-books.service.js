@@ -29,14 +29,40 @@ export class GoogleBooksService {
     const cached = await this.redis.get(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}${this._apiKeyParam()}`;
-    const data = await this._fetchJson(url);
-    const item = data?.items?.[0];
-    if (!item) throw new NotFoundException('No book found for that ISBN');
+    // Try Google Books first; only reach for Open Library — a second, free,
+    // no-key-needed catalog — when Google Books has nothing (or is itself
+    // erroring out), so a normal successful lookup pays no extra latency.
+    const normalized = (await this._lookupGoogleBooksIsbn(isbn)) || (await this._lookupOpenLibraryIsbn(isbn));
+    if (!normalized) throw new NotFoundException('No book found for that ISBN');
 
-    const normalized = this._normalize(item, isbn);
     await this.redis.set(cacheKey, JSON.stringify(normalized), CACHE_TTL_SECONDS);
     return normalized;
+  }
+
+  async _lookupGoogleBooksIsbn(isbn) {
+    try {
+      const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}${this._apiKeyParam()}`;
+      const data = await this._fetchJson(url);
+      const item = data?.items?.[0];
+      return item ? this._normalize(item, isbn) : null;
+    } catch (err) {
+      this.logger.warn(`Google Books ISBN lookup failed, falling back to Open Library: ${err.message}`);
+      return null;
+    }
+  }
+
+  async _lookupOpenLibraryIsbn(isbn) {
+    try {
+      const url = `https://openlibrary.org/api/books.json?bibkeys=ISBN:${encodeURIComponent(isbn)}&jscmd=data&format=json`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const entry = data?.[`ISBN:${isbn}`];
+      return entry ? this._normalizeOpenLibrary(entry, isbn) : null;
+    } catch (err) {
+      this.logger.warn(`Open Library ISBN lookup failed: ${err.message}`);
+      return null;
+    }
   }
 
   async searchByTitleOrAuthor(query, { limit = 10 } = {}) {
@@ -78,6 +104,28 @@ export class GoogleBooksService {
       coverImageUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://') || null,
       languageCode: info.language || null,
       genre: info.categories?.[0] || null,
+      isbn13: isbn13 || (fallbackIsbn?.length === 13 ? fallbackIsbn : null),
+      isbn10: isbn10 || (fallbackIsbn?.length === 10 ? fallbackIsbn : null),
+    };
+  }
+
+  _normalizeOpenLibrary(entry, fallbackIsbn) {
+    const isbn13 = entry.identifiers?.isbn_13?.[0] || null;
+    const isbn10 = entry.identifiers?.isbn_10?.[0] || null;
+    const publishYear = entry.publish_date ? parseInt(String(entry.publish_date).slice(-4), 10) : null;
+
+    return {
+      googleBooksId: null,
+      title: entry.title || 'Untitled',
+      subtitle: entry.subtitle || null,
+      author: (entry.authors || []).map((a) => a.name).join(', ') || 'Unknown Author',
+      description: null,
+      publisher: entry.publishers?.[0]?.name || null,
+      publicationYear: Number.isNaN(publishYear) ? null : publishYear,
+      pageCount: entry.number_of_pages || null,
+      coverImageUrl: entry.cover?.large || entry.cover?.medium || entry.cover?.small || null,
+      languageCode: null,
+      genre: entry.subjects?.[0]?.name || null,
       isbn13: isbn13 || (fallbackIsbn?.length === 13 ? fallbackIsbn : null),
       isbn10: isbn10 || (fallbackIsbn?.length === 10 ? fallbackIsbn : null),
     };
