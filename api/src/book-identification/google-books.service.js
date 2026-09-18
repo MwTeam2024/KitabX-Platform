@@ -66,9 +66,38 @@ export class GoogleBooksService {
   }
 
   async searchByTitleOrAuthor(query, { limit = 10 } = {}) {
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=${limit}${this._apiKeyParam()}`;
-    const data = await this._fetchJson(url);
-    return (data?.items || []).map((item) => this._normalize(item));
+    // Same reasoning as lookupByIsbn: try Google Books first, and only reach
+    // for Open Library when Google Books has no matches (or is erroring out).
+    const googleResults = await this._searchGoogleBooks(query, limit);
+    if (googleResults.length) return googleResults;
+    return this._searchOpenLibrary(query, limit);
+  }
+
+  async _searchGoogleBooks(query, limit) {
+    try {
+      const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=${limit}${this._apiKeyParam()}`;
+      const data = await this._fetchJson(url);
+      return (data?.items || []).map((item) => this._normalize(item));
+    } catch (err) {
+      this.logger.warn(`Google Books search failed, falling back to Open Library: ${err.message}`);
+      return [];
+    }
+  }
+
+  async _searchOpenLibrary(query, limit) {
+    try {
+      // fields must be listed explicitly — Open Library's default response
+      // omits isbn (and some of the other fields we need) otherwise.
+      const fields = 'title,subtitle,author_name,cover_i,first_publish_year,isbn,publisher,subject,language,number_of_pages_median';
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${limit}&fields=${fields}`;
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data?.docs || []).map((doc) => this._normalizeOpenLibrarySearchDoc(doc));
+    } catch (err) {
+      this.logger.warn(`Open Library search failed: ${err.message}`);
+      return [];
+    }
   }
 
   async _fetchJson(url) {
@@ -128,6 +157,25 @@ export class GoogleBooksService {
       genre: entry.subjects?.[0]?.name || null,
       isbn13: isbn13 || (fallbackIsbn?.length === 13 ? fallbackIsbn : null),
       isbn10: isbn10 || (fallbackIsbn?.length === 10 ? fallbackIsbn : null),
+    };
+  }
+
+  _normalizeOpenLibrarySearchDoc(doc) {
+    const isbns = doc.isbn || [];
+    return {
+      googleBooksId: null,
+      title: doc.title || 'Untitled',
+      subtitle: doc.subtitle || null,
+      author: (doc.author_name || []).join(', ') || 'Unknown Author',
+      description: null,
+      publisher: doc.publisher?.[0] || null,
+      publicationYear: doc.first_publish_year || null,
+      pageCount: doc.number_of_pages_median || null,
+      coverImageUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null,
+      languageCode: doc.language?.[0] || null,
+      genre: doc.subject?.[0] || null,
+      isbn13: isbns.find((i) => i.length === 13) || null,
+      isbn10: isbns.find((i) => i.length === 10) || null,
     };
   }
 }
