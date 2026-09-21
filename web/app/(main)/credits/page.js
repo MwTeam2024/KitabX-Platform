@@ -49,7 +49,7 @@ export default function CreditsPage() {
         </div>
 
         <div className="section-row" style={{ padding: '0 0 10px' }}>
-          <SectionTitle size={15}>Transaction history <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Compact View)</span></SectionTitle>
+          <SectionTitle size={15}>Transaction history</SectionTitle>
         </div>
 
         <div style={{ marginBottom: 22 }}>
