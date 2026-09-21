@@ -82,11 +82,11 @@ export default function AddBookMethodPage() {
           </div>
           <div>
             <b style={{ fontSize: 14, color: '#fff' }}>
-              Bulk upload with AI
+              Single & Bulk Book Upload with AI
               <span className="new-pill" style={{ background: 'rgba(255,255,255,.2)', color: '#fff' }}>New</span>
             </b>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,.75)', marginTop: 2 }}>
-              Got a pile of books? Snap one photo — AI finds every title for you
+              Upload one book or multiple books — AI finds every title for you
             </div>
           </div>
         </button>
