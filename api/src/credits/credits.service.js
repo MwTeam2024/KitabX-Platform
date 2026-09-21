@@ -61,7 +61,14 @@ export class CreditsService {
   }
 
   _statusLabel(row) {
-    if (row.status === 'REVERSED') return 'Released';
+    if (row.status === 'REVERSED') {
+      // BOOK_LISTED + REVERSED only ever comes from reverseAvailableCredit
+      // (credits.tx.js) — removing a listing takes its credit back (amount
+      // -1). Every other REVERSED row is a reserved credit given back to the
+      // member (amount +1) — "Released" reads right there, but was
+      // misleading on a listing removal, where credit is actually leaving.
+      return row.type === 'BOOK_LISTED' ? 'Withdrawn' : 'Released';
+    }
     if (row.status === 'PENDING') return row.type === 'BOOK_LISTED' ? 'Pending' : 'Reserved';
     if (row.type === 'EXCHANGE_COMPLETED') return 'Deducted';
     return 'Available';

@@ -6,8 +6,20 @@ import EmptyState from '@/components/ui/EmptyState';
 import Icon from '@/components/ui/Icon';
 import { SectionTitle, StatusPill, toneForStatus } from '@/components/ui/NoteBox';
 import { useAppData } from '@/contexts/AppDataContext';
-import { useToast } from '@/components/ui/ToastProvider';
 import { timeAgo } from '@/lib/dates';
+
+// Same three palettes as .st-avail/.st-req/.st-given (globals.css) — the
+// leading icon circle reuses the status pill's own colors instead of
+// inventing a fourth scheme.
+const ICON_BY_STATUS = {
+  Available: { icon: 'plus', bg: 'var(--mint)', color: 'var(--brand-2)' },
+  Released: { icon: 'arrowLeft', bg: 'var(--mint)', color: 'var(--brand-2)' },
+  Reserved: { icon: 'fileText', bg: '#DDEAE0', color: 'var(--brand)' },
+  Pending: { icon: 'clock', bg: '#DDEAE0', color: 'var(--brand)' },
+  Withdrawn: { icon: 'trash', bg: 'var(--orange-soft)', color: 'var(--orange)' },
+  Deducted: { icon: 'minus', bg: 'var(--orange-soft)', color: 'var(--orange)' },
+};
+const DEFAULT_ICON = { icon: 'coin', bg: 'var(--orange-soft)', color: 'var(--orange)' };
 
 const RULES = [
   { title: '📖 List a book', body: <>You receive 1 <b>available</b> credit the instant you list a book — spendable right away.</> },
@@ -22,26 +34,9 @@ const RULES = [
  * backend transactions are the source of truth.
  */
 export default function CreditsPage() {
-  const { credits, creditHistory, deleteCreditTransaction, clearCreditHistory, refreshCredits } = useAppData();
-  const showToast = useToast();
+  const { credits, creditHistory, refreshCredits } = useAppData();
 
   useEffect(() => { refreshCredits().catch(() => {}); }, [refreshCredits]);
-
-  const onDelete = async (id) => {
-    try {
-      await deleteCreditTransaction(id);
-    } catch (err) {
-      showToast(err.message || 'Could not remove this entry');
-    }
-  };
-
-  const onClearAll = async () => {
-    try {
-      await clearCreditHistory();
-    } catch (err) {
-      showToast(err.message || 'Could not clear history');
-    }
-  };
 
   return (
     <>
@@ -53,35 +48,50 @@ export default function CreditsPage() {
           <Balance value={credits.reserved} label="Reserved" color="var(--sindoor)" />
         </div>
 
-        <div className="section-row" style={{ padding: '0 0 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <SectionTitle size={15}>Transaction history</SectionTitle>
-          {creditHistory.length > 0 && (
-            <button className="link-green" style={{ fontSize: 12 }} onClick={onClearAll}>
-              Clear all
-            </button>
-          )}
+        <div className="section-row" style={{ padding: '0 0 10px' }}>
+          <SectionTitle size={15}>Transaction history <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Compact View)</span></SectionTitle>
         </div>
 
         <div style={{ marginBottom: 22 }}>
-          {creditHistory.length ? creditHistory.map((h) => (
-            <div className="list-row" key={h.id} style={{ margin: '0 0 10px', width: '100%' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <b style={{ fontSize: 13, display: 'block' }}>{h.desc}</b>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{timeAgo(h.time)}</div>
-              </div>
-              <StatusPill tone={toneForStatus(h.status)} style={{ flexShrink: 0, marginTop: 0 }}>
-                {h.status}
-              </StatusPill>
-              <button
-                className="circle-btn"
-                style={{ width: 24, height: 24, flexShrink: 0, marginLeft: 8 }}
-                onClick={() => onDelete(h.id)}
-                aria-label="Remove this entry"
+          {creditHistory.length ? creditHistory.map((h) => {
+            const iconInfo = ICON_BY_STATUS[h.status] || DEFAULT_ICON;
+            return (
+              <div
+                className="list-row"
+                key={h.id}
+                style={{ margin: '0 0 8px', width: '100%', padding: '10px 12px', gap: 10 }}
               >
-                <Icon name="x" style={{ width: 11, height: 11 }} />
-              </button>
-            </div>
-          )) : (
+                <div
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                    background: iconInfo.bg, color: iconInfo.color,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Icon name={iconInfo.icon} style={{ width: 15, height: 15 }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <b style={{ fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {h.desc}
+                  </b>
+                  <StatusPill tone={toneForStatus(h.status)} style={{ marginTop: 0, flexShrink: 0 }}>
+                    {h.status}
+                  </StatusPill>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{timeAgo(h.time)}</span>
+                <b
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 15,
+                    flexShrink: 0,
+                    color: h.amount > 0 ? 'var(--brand-2)' : 'var(--sindoor)',
+                  }}
+                >
+                  {h.amount > 0 ? `+${h.amount}` : h.amount}
+                </b>
+              </div>
+            );
+          }) : (
             <EmptyState icon="🪙" title="No credit activity yet." />
           )}
         </div>
