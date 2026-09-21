@@ -6,6 +6,12 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
+  // Neon's pooled connection (PgBouncer, transaction mode) doesn't preserve
+  // session state across pooled connections, so `prisma migrate deploy`'s
+  // advisory lock (pg_advisory_lock) can't reliably hold — migrations need
+  // this direct, non-pooled connection instead. Runtime queries still use
+  // the pooled `url` above.
+  directUrl  = env("DIRECT_URL")
   extensions = [postgis]
 }
 
