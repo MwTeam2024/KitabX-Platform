@@ -105,7 +105,7 @@ export default function AdminLoginPage() {
     <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <form
         className="card"
-        style={{ maxWidth: 340, width: '100%', padding: '32px 28px', textAlign: 'center' }}
+        style={{ maxWidth: 420, width: '100%', padding: '44px 40px', textAlign: 'center' }}
         onSubmit={step === 'enter' ? sendCode : verify}
       >
         <div className="logo-badge" style={{ margin: '0 auto 18px' }} />
