@@ -12,7 +12,6 @@ import { coverForDraft } from '@/contexts/BookDraftContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/components/ui/ToastProvider';
 import { booksService } from '@/services/books.service';
-import { uploadsService } from '@/services/uploads.service';
 
 const SCAN_STEPS = ['Reading your photo…', 'Detecting book covers…', 'Matching titles and authors…'];
 const MIN_SCAN_MS = 1300;
@@ -53,8 +52,10 @@ export default function BulkUploadPage() {
   const [bundlePhotoUrl, setBundlePhotoUrl] = useState('');
   const [zoomSrc, setZoomSrc] = useState('');
   const timers = useRef([]);
+  const bundlePhotoUrlRef = useRef('');
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  useEffect(() => () => { if (bundlePhotoUrlRef.current) URL.revokeObjectURL(bundlePhotoUrlRef.current); }, []);
 
   const runScan = async (file) => {
     setPhase('scanning');
@@ -70,18 +71,21 @@ export default function BulkUploadPage() {
     const body = new FormData();
     body.append('image', file);
     const minDelay = new Promise((resolve) => timers.current.push(setTimeout(resolve, MIN_SCAN_MS)));
+    if (bundlePhotoUrlRef.current) URL.revokeObjectURL(bundlePhotoUrlRef.current);
     setBundlePhotoUrl('');
 
     try {
-      // Uploaded once here and reused as a shared secondary photo on every
-      // listing published from this batch — the bundle shot is evidence the
-      // books in it exist together, not a per-book cover.
-      const [{ candidates }, bundleUpload] = await Promise.all([
+      // Kept only as an on-screen reference for this review step — a local
+      // object URL, never uploaded, since it must never end up attached to
+      // any individual book's listing photos (each listing shows only its
+      // own cover, from Google Books).
+      const objectUrl = URL.createObjectURL(file);
+      bundlePhotoUrlRef.current = objectUrl;
+      setBundlePhotoUrl(objectUrl);
+      const [{ candidates }] = await Promise.all([
         booksService.extractFromImage(body),
-        uploadsService.uploadListingPhoto(file).catch(() => null),
         minDelay,
       ]);
-      if (bundleUpload?.url) setBundlePhotoUrl(bundleUpload.url);
       const items = (candidates || []).filter((c) => c?.title).map(toDetectedItem);
       if (!items.length) {
         setDetected([]);
@@ -118,7 +122,7 @@ export default function BulkUploadPage() {
           isbn: d.isbn,
           year: d.year,
           pickup: '',
-          photos: [d.coverImageUrl, bundlePhotoUrl].filter(Boolean),
+          photos: [d.coverImageUrl].filter(Boolean),
         });
         published += 1;
       } catch {
@@ -236,7 +240,7 @@ export default function BulkUploadPage() {
             {bundlePhotoUrl && (
               <div style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
-                  Your photo — attached to every book below as proof of the set
+                  Your uploaded photo — for reference only, not attached to any listing below
                 </div>
                 <button
                   type="button"
