@@ -12,6 +12,29 @@ import { coverForDraft } from '@/contexts/BookDraftContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/components/ui/ToastProvider';
 import { booksService } from '@/services/books.service';
+import { uploadsService } from '@/services/uploads.service';
+import { useSheet } from '@/components/ui/SheetProvider';
+
+function DuplicateListingConfirm({ titles, onConfirm, onCancel }) {
+  return (
+    <>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '-8px 0 12px' }}>
+        {titles.length === 1
+          ? 'You already have this book listed. If you have another physical copy to give away, you can list it again.'
+          : `You already have ${titles.length} of these books listed. If you have another physical copy of each, you can list them again.`}
+      </div>
+      {titles.length > 1 && (
+        <ul style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 16px', paddingLeft: 18 }}>
+          {titles.map((t) => <li key={t}>{t}</li>)}
+        </ul>
+      )}
+      <button className="btn btn-primary" onClick={onConfirm} style={{ marginBottom: 8 }}>
+        {titles.length === 1 ? 'Yes, I have another copy' : 'Yes, add them again'}
+      </button>
+      <button className="btn btn-outline" onClick={onCancel}>Cancel</button>
+    </>
+  );
+}
 
 const SCAN_STEPS = ['Reading your photo…', 'Detecting book covers…', 'Matching titles and authors…'];
 const MIN_SCAN_MS = 1300;
@@ -44,6 +67,7 @@ export default function BulkUploadPage() {
   const router = useRouter();
   const showToast = useToast();
   const { publishBook } = useAppData();
+  const { openSheet, closeSheet } = useSheet();
   const [phase, setPhase] = useState('idle'); // idle | scanning | review | empty
   const [stepIndex, setStepIndex] = useState(0);
   const [detected, setDetected] = useState([]);
@@ -52,10 +76,8 @@ export default function BulkUploadPage() {
   const [bundlePhotoUrl, setBundlePhotoUrl] = useState('');
   const [zoomSrc, setZoomSrc] = useState('');
   const timers = useRef([]);
-  const bundlePhotoUrlRef = useRef('');
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
-  useEffect(() => () => { if (bundlePhotoUrlRef.current) URL.revokeObjectURL(bundlePhotoUrlRef.current); }, []);
 
   const runScan = async (file) => {
     setPhase('scanning');
@@ -71,21 +93,21 @@ export default function BulkUploadPage() {
     const body = new FormData();
     body.append('image', file);
     const minDelay = new Promise((resolve) => timers.current.push(setTimeout(resolve, MIN_SCAN_MS)));
-    if (bundlePhotoUrlRef.current) URL.revokeObjectURL(bundlePhotoUrlRef.current);
     setBundlePhotoUrl('');
 
     try {
-      // Kept only as an on-screen reference for this review step — a local
-      // object URL, never uploaded, since it must never end up attached to
-      // any individual book's listing photos (each listing shows only its
-      // own cover, from Google Books).
-      const objectUrl = URL.createObjectURL(file);
-      bundlePhotoUrlRef.current = objectUrl;
-      setBundlePhotoUrl(objectUrl);
-      const [{ candidates }] = await Promise.all([
+      // Uploaded once here and attached (as a separate, distinctly-tagged
+      // "group photo") to every listing published from this batch — proof
+      // the books in it exist together. The backend tags it `OTHER` (not
+      // COVER/ACTUAL_CONDITION) so the detail page knows to overlay it with
+      // "Includes This Book: <title>" instead of showing it as if it were
+      // that book's own photo.
+      const [{ candidates }, bundleUpload] = await Promise.all([
         booksService.extractFromImage(body),
+        uploadsService.uploadListingPhoto(file).catch(() => null),
         minDelay,
       ]);
+      if (bundleUpload?.url) setBundlePhotoUrl(bundleUpload.url);
       const items = (candidates || []).filter((c) => c?.title).map(toDetectedItem);
       if (!items.length) {
         setDetected([]);
@@ -106,29 +128,79 @@ export default function BulkUploadPage() {
 
   const allSelected = selected.length === detected.length;
 
+  // One combined prompt for the whole batch, not one per duplicate — the
+  // user already chose which books to include via the checkboxes above, so
+  // asking the same "already listed?" question over and over per book (with
+  // no title in the generic message, they read as identical) just looked
+  // like the app was stuck repeating itself.
+  const confirmDuplicates = (titles) =>
+    new Promise((resolve) => {
+      // resolve() is safe to call more than once (only the first call does
+      // anything) — so closing the sheet via the X/backdrop, which fires
+      // onClose instead of onConfirm/onCancel, still resolves this and
+      // never leaves the publish loop (and the "Adding…" button) stuck.
+      openSheet(
+        'Already listed',
+        <DuplicateListingConfirm
+          titles={titles}
+          onConfirm={() => { closeSheet(); resolve(true); }}
+          onCancel={() => { closeSheet(); resolve(false); }}
+        />,
+        { onClose: () => resolve(false) },
+      );
+    });
+
   const publishSelected = async () => {
     const chosen = detected.filter((d) => selected.includes(d.id));
+    // Several distinct books in the photo is what "bulk" means — with just
+    // one, this run is really a single-book add, so the photo the user took
+    // is that one book's own actual-condition photo, not a "group" photo:
+    // it still belongs on the listing, just as a normal photo (no "part of
+    // a bulk upload" tag, which would be both wrong and confusing here).
+    const isBulk = detected.length > 1;
+    const groupPhotoUrl = isBulk ? (bundlePhotoUrl || undefined) : undefined;
     setPublishing(true);
     let published = 0;
+    const duplicates = []; // { d, payload } — resolved together after this pass
+
     for (const d of chosen) {
+      const payload = {
+        title: d.title,
+        author: d.author,
+        genre: d.genre,
+        lang: 'English',
+        cond: 'Good',
+        isbn: d.isbn,
+        year: d.year,
+        pickup: '',
+        photos: [d.coverImageUrl, ...(isBulk ? [] : [bundlePhotoUrl])].filter(Boolean),
+        groupPhotoUrl,
+      };
       try {
         // eslint-disable-next-line no-await-in-loop
-        await publishBook({
-          title: d.title,
-          author: d.author,
-          genre: d.genre,
-          lang: 'English',
-          cond: 'Good',
-          isbn: d.isbn,
-          year: d.year,
-          pickup: '',
-          photos: [d.coverImageUrl].filter(Boolean),
-        });
+        await publishBook(payload);
         published += 1;
-      } catch {
-        // One failure shouldn't block the rest of the batch.
+      } catch (err) {
+        if (err.status === 409) duplicates.push({ d, payload });
+        // Any other failure shouldn't block the rest of the batch.
       }
     }
+
+    if (duplicates.length) {
+      const shouldAddAnother = await confirmDuplicates(duplicates.map(({ d }) => d.title));
+      if (shouldAddAnother) {
+        for (const { payload } of duplicates) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            await publishBook(payload, { confirmDuplicate: true });
+            published += 1;
+          } catch {
+            // Still failed even after confirming — skip it.
+          }
+        }
+      }
+    }
+
     setPublishing(false);
     showToast(`${published} book${published === 1 ? '' : 's'} added to My Shelf`);
     router.push('/books');
@@ -240,7 +312,7 @@ export default function BulkUploadPage() {
             {bundlePhotoUrl && (
               <div style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
-                  Your uploaded photo — for reference only, not attached to any listing below
+                  Your photo — attached to every book below, tagged with each book&apos;s title so it&apos;s clear which one it is
                 </div>
                 <button
                   type="button"

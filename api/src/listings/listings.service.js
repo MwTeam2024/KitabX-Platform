@@ -41,7 +41,8 @@ export class ListingsService {
     if (!owner.societyId) {
       throw new BadRequestException('Join a society before listing a book');
     }
-    if ((payload.photoUrls || []).length > MAX_PHOTOS) {
+    const photoUrls = payload.photoUrls || [];
+    if (photoUrls.length + (payload.groupPhotoUrl ? 1 : 0) > MAX_PHOTOS) {
       throw new BadRequestException(`A listing can have at most ${MAX_PHOTOS} photos`);
     }
 
@@ -73,16 +74,22 @@ export class ListingsService {
         },
       });
 
-      const photoUrls = payload.photoUrls || [];
-      if (photoUrls.length) {
-        await tx.bookListingPhoto.createMany({
-          data: photoUrls.map((url, index) => ({
-            listingId: listing.id,
-            imageUrl: url,
-            imageType: index === 0 ? 'COVER' : 'ACTUAL_CONDITION',
-            sortOrder: index,
-          })),
-        });
+      if (photoUrls.length || payload.groupPhotoUrl) {
+        // §groupPhotoUrl: the bulk-upload flow's one shared "books together"
+        // photo (proof several books came from the same set) — tagged OTHER,
+        // distinct from COVER/ACTUAL_CONDITION, so the frontend knows to
+        // overlay it with "Includes This Book: <title>" instead of showing
+        // it as if it were this book's own photo.
+        const rows = photoUrls.map((url, index) => ({
+          listingId: listing.id,
+          imageUrl: url,
+          imageType: index === 0 ? 'COVER' : 'ACTUAL_CONDITION',
+          sortOrder: index,
+        }));
+        if (payload.groupPhotoUrl) {
+          rows.push({ listingId: listing.id, imageUrl: payload.groupPhotoUrl, imageType: 'OTHER', sortOrder: rows.length });
+        }
+        await tx.bookListingPhoto.createMany({ data: rows });
       }
 
       await grantAvailableCredit(tx, { userId: ownerId, referenceId: listing.id, bookTitle: book.title });
@@ -337,6 +344,7 @@ export class ListingsService {
       ownerVerified: listing.owner.verificationStatus === 'VERIFIED',
       loc: toBookListingLocation(listing, { revealFull }),
       photos: listing.photos.map((p) => p.imageUrl),
+      groupPhotoUrl: listing.photos.find((p) => p.imageType === 'OTHER')?.imageUrl || null,
       listedDaysAgo: Math.max(0, Math.floor((Date.now() - new Date(listing.createdAt).getTime()) / 86400000)),
       tags: [listing.condition, listing.book.genre].filter(Boolean),
     };

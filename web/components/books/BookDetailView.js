@@ -542,6 +542,16 @@ function ConditionPhotoGallery({ book, onZoom }) {
   return (
     <div>
       <div style={{ position: 'relative' }}>
+        {activeUrl && book.groupPhotoUrl && activeUrl === book.groupPhotoUrl && (
+          <div
+            style={{
+              background: 'var(--brand)', color: '#fff', borderRadius: 8,
+              padding: '8px 12px', fontSize: 12.5, textAlign: 'left', marginBottom: 8,
+            }}
+          >
+            This Book Is Part of the Bulk Upload: <b>{book.title}</b>
+          </div>
+        )}
         {activeUrl ? (
           <button
             type="button"

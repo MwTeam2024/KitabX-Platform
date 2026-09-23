@@ -561,6 +561,7 @@ function toListingPayload(draft, { partial } = {}) {
     conditionDescription: draft.condDesc || undefined,
     pickupInstructions: draft.pickup || undefined,
     photoUrls: draft.photos || undefined,
+    groupPhotoUrl: draft.groupPhotoUrl || undefined,
     book: {
       title: draft.title,
       author: draft.author,

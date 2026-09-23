@@ -20,7 +20,19 @@ export class GeminiService {
     return !!this.config.get('GEMINI_API_KEY');
   }
 
-  /** @param {Buffer} imageBuffer @param {string} mimeType */
+  /**
+   * @param {Buffer} imageBuffer @param {string} mimeType
+   *
+   * Google's free-tier request quota (20/day, confirmed live via the API's
+   * own 429 body) is per model, not per account/key — "20/day" from just
+   * gemini-3.6-flash was the real bottleneck, not the key itself. So this
+   * tries each model in MODELS in turn: a 429 (quota) or 503 (that specific
+   * model overloaded) moves on to the next one instead of failing the whole
+   * scan, multiplying the effective free daily capacity across models
+   * without needing a second API key or provider. Any other error (bad
+   * request, real auth failure, ...) still fails immediately — those aren't
+   * "try a different model" situations.
+   */
   async extractBooksFromImage(imageBuffer, mimeType) {
     const apiKey = this.config.get('GEMINI_API_KEY');
     if (!apiKey) {
@@ -46,51 +58,66 @@ export class GeminiService {
       'Return one entry per distinct book, in the JSON format defined by the response schema.',
     ].join(' ');
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimeType || 'image/jpeg', data: imageBuffer.toString('base64') } },
-            ],
-          },
-        ],
-        generationConfig: {
-          // Structured output — the API guarantees a schema-conforming JSON
-          // body with no wrapping prose/markdown fences, which is both more
-          // reliable to parse than regex-extracting a JSON array out of free
-          // text and faster (no wasted prose tokens to generate).
-          responseMimeType: 'application/json',
-          responseSchema: BOOK_CANDIDATES_SCHEMA,
-          // Low temperature suits this extraction task (we want the model's
-          // best single read, not creative variation) and converges faster.
-          temperature: 0.1,
-          maxOutputTokens: 2048,
-          // gemini-3.6-flash thinks by default (it can't be turned off
-          // entirely — thinkingBudget: 0 is rejected as invalid for this
-          // model) — confirmed live that left at its default this single
-          // call took over 13 seconds for what is, at bottom, a straight
-          // vision-recognition task rather than something needing deep
-          // chain-of-thought. Capping it to LOW cut that to ~3 seconds with
-          // no code-visible change in output quality on the same test image.
-          thinkingConfig: { thinkingLevel: 'LOW' },
-        },
-      }),
-    });
+    const imagePart = { inline_data: { mime_type: mimeType || 'image/jpeg', data: imageBuffer.toString('base64') } };
+    let lastError = null;
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      this.logger.error(`Gemini request failed (${res.status}): ${text}`);
+    for (const model of MODELS) {
+      const generationConfig = {
+        // Structured output — the API guarantees a schema-conforming JSON
+        // body with no wrapping prose/markdown fences, which is both more
+        // reliable to parse than regex-extracting a JSON array out of free
+        // text and faster (no wasted prose tokens to generate).
+        responseMimeType: 'application/json',
+        responseSchema: BOOK_CANDIDATES_SCHEMA,
+        // Low temperature suits this extraction task (we want the model's
+        // best single read, not creative variation) and converges faster.
+        temperature: 0.1,
+        maxOutputTokens: 2048,
+      };
+      if (model.supportsThinkingLevel) {
+        // This model thinks by default and can't have it turned off
+        // entirely (thinkingBudget: 0 is rejected as invalid) — confirmed
+        // live that left at its default a single call took over 13 seconds
+        // for what is, at bottom, a straight vision-recognition task rather
+        // than something needing deep chain-of-thought. Capping it to LOW
+        // cut that to ~3 seconds with no code-visible quality loss. Other
+        // models in the fallback list reject this field outright (confirmed
+        // live: "Thinking level is not supported for this model"), so it's
+        // only sent to models that are known to accept it.
+        generationConfig.thinkingConfig = { thinkingLevel: 'LOW' };
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model.id}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, imagePart] }], generationConfig }),
+        },
+      );
+
+      if (res.ok) {
+        // eslint-disable-next-line no-await-in-loop
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+        return this._parseCandidates(text);
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const body = await res.text().catch(() => '');
+      lastError = { status: res.status, body };
+      if (res.status === 429 || res.status === 503) {
+        this.logger.warn(`Gemini ${model.id} unavailable (${res.status}) — trying the next model`);
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      this.logger.error(`Gemini request failed (${res.status}): ${body}`);
       throw new ServiceUnavailableException('Could not analyze that photo right now — try again shortly.');
     }
 
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-    return this._parseCandidates(text);
+    this.logger.error(`All Gemini models exhausted/unavailable. Last error: ${lastError?.status} ${lastError?.body}`);
+    throw new ServiceUnavailableException('Could not analyze that photo right now — try again shortly.');
   }
 
   _parseCandidates(text) {
@@ -103,6 +130,36 @@ export class GeminiService {
     }
   }
 }
+
+// Tried in this order — ranked by a live, repeatable head-to-head test run
+// against the real API: the same 4 real book-cover photos sent to all 7
+// models. Every model correctly identified every book at "high" confidence
+// (accuracy was a tie), so the ranking below is by response time and how
+// complete the secondary fields (isbn/publisher/year) came back:
+//   1. gemini-3.5-flash-lite — fastest every time (1.7-2.4s), always complete
+//   2. gemini-3.1-flash-lite — ~4s, always complete
+//   3. gemini-3.5-flash — ~3-4.6s, complete
+//   4. gemini-3.6-flash — the original default, solid quality (no fresh
+//      timing data — its free quota was already exhausted during testing)
+//   5. gemini-3.7-flash — solid when available, but flaked with a 503
+//      "high demand" mid-test, so it's ranked below the proven performers
+//   6. gemini-2.5-flash — consistently slowest of the full-size models
+//      (5.4-6.2s) and never returns an isbn
+//   7. gemini-2.5-flash-lite — least reliable: response time varied wildly
+//      across identical calls (3.4s, then 8s, then 21.5s) and it drops
+//      fields other models keep (isbn, sometimes publisher/year)
+// gemini-2.5-flash, gemini-3.5-flash and gemini-2.5-flash-lite specifically
+// reject `thinkingConfig.thinkingLevel` (400 "Thinking level is not
+// supported for this model"), hence the per-model flag.
+const MODELS = [
+  { id: 'gemini-3.5-flash-lite', supportsThinkingLevel: true },
+  { id: 'gemini-3.1-flash-lite', supportsThinkingLevel: true },
+  { id: 'gemini-3.5-flash', supportsThinkingLevel: false },
+  { id: 'gemini-3.6-flash', supportsThinkingLevel: true },
+  { id: 'gemini-3.7-flash', supportsThinkingLevel: true },
+  { id: 'gemini-2.5-flash', supportsThinkingLevel: false },
+  { id: 'gemini-2.5-flash-lite', supportsThinkingLevel: false },
+];
 
 const BOOK_CANDIDATES_SCHEMA = {
   type: 'ARRAY',
