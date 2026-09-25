@@ -126,18 +126,18 @@ export default function ProfilePage() {
         </div>
 
         <div className="stats-float">
-          <button className="sf" onClick={() => router.push('/books')}>
+          <div className="sf">
             <Icon name="bookOpen" /><b>{stats.listed}</b><span>Listed</span>
-          </button>
-          <button className="sf" onClick={() => router.push('/books')}>
+          </div>
+          <div className="sf">
             <Icon name="download" /><b>{stats.received}</b><span>Received</span>
-          </button>
-          <button className="sf" onClick={() => router.push('/books')}>
+          </div>
+          <div className="sf">
             <Icon name="gift" /><b>{stats.given}</b><span>Given</span>
-          </button>
-          <button className="sf" onClick={() => router.push('/credits')}>
+          </div>
+          <div className="sf">
             <Icon name="coin" /><b>{credits.available}</b><span>Credits</span>
-          </button>
+          </div>
         </div>
 
         <div style={{ margin: '22px 16px 12px' }}>

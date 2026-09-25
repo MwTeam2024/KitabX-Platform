@@ -10,11 +10,11 @@ import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/components/ui/ToastProvider';
 import { useSheet } from '@/components/ui/SheetProvider';
 
-function DuplicateListingConfirm({ onConfirm, onCancel }) {
+function DuplicateListingConfirm({ title, onConfirm, onCancel }) {
   return (
     <>
       <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '-8px 0 16px' }}>
-        You already have this book listed. If you have another physical copy to give away, you can list it again.
+        You already have &quot;{title}&quot; listed. If you have another physical copy to give away, you can list it again.
       </div>
       <button className="btn btn-primary" onClick={onConfirm} style={{ marginBottom: 8 }}>
         Yes, I have another copy
@@ -25,8 +25,8 @@ function DuplicateListingConfirm({ onConfirm, onCancel }) {
 }
 
 /**
- * Screen 10 — preview then publish. Listing earns a *pending* credit; it only
- * becomes available after a verified handover, and NestJS owns that transition.
+ * Screen 10 — preview then publish. Listing a book grants a credit that's
+ * spendable immediately — it isn't held pending a handover.
  */
 export default function PreviewListingPage() {
   const router = useRouter();
@@ -45,13 +45,14 @@ export default function PreviewListingPage() {
     try {
       await publishBook(draft, opts);
       resetDraft();
-      showToast("Listed! Credit lands once it's handed over 📖");
+      showToast("Listed! Credit added to your balance 📖");
       router.push('/books');
     } catch (err) {
       if (!opts?.confirmDuplicate && err.status === 409) {
         openSheet(
           'Already listed',
           <DuplicateListingConfirm
+            title={draft.title}
             onConfirm={() => { closeSheet(); doPublish({ confirmDuplicate: true }); }}
             onCancel={closeSheet}
           />,
@@ -125,7 +126,7 @@ export default function PreviewListingPage() {
         </div>
 
         <NoteBox icon="gift">
-          Every book listed is a permanent gift. Once it&apos;s handed over, you&apos;ll earn <b>1 credit</b> to
+          Every book listed is a permanent gift. Publishing this listing earns you <b>1 credit</b> right away to
           request any book you like.
         </NoteBox>
       </div>

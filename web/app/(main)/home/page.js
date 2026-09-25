@@ -111,10 +111,10 @@ export default function HomePage() {
 
         <StatTiles
           tiles={[
-            { icon: 'bookOpen', value: stats?.totalBooks ?? 0, label: 'Books listed', href: '/books' },
+            { icon: 'bookOpen', value: stats?.totalBooks ?? 0, label: 'Books listed' },
             { icon: 'users', value: stats?.totalMembers ?? 0, label: 'Members' },
             { icon: 'building', value: stats?.totalSocieties ?? 0, label: 'Societies' },
-            { icon: 'heart', value: wishlist.length, label: 'My wishlist', href: '/wishlist' },
+            { icon: 'heart', value: wishlist.length, label: 'My wishlist' },
           ]}
         />
 

@@ -20,7 +20,7 @@ function DuplicateListingConfirm({ titles, onConfirm, onCancel }) {
     <>
       <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '-8px 0 12px' }}>
         {titles.length === 1
-          ? 'You already have this book listed. If you have another physical copy to give away, you can list it again.'
+          ? <>You already have &quot;{titles[0]}&quot; listed. If you have another physical copy to give away, you can list it again.</>
           : `You already have ${titles.length} of these books listed. If you have another physical copy of each, you can list them again.`}
       </div>
       {titles.length > 1 && (
@@ -66,7 +66,7 @@ function toDetectedItem(candidate, i) {
 export default function BulkUploadPage() {
   const router = useRouter();
   const showToast = useToast();
-  const { publishBook } = useAppData();
+  const { publishBook, removeListing } = useAppData();
   const { openSheet, closeSheet } = useSheet();
   const [phase, setPhase] = useState('idle'); // idle | scanning | review | empty
   const [stepIndex, setStepIndex] = useState(0);
@@ -162,6 +162,8 @@ export default function BulkUploadPage() {
     setPublishing(true);
     let published = 0;
     const duplicates = []; // { d, payload } — resolved together after this pass
+    const failed = []; // titles that never made it in, for any reason
+    const newlyPublishedKeys = []; // this run's own non-duplicate listings, in case of a rollback below
 
     for (const d of chosen) {
       const payload = {
@@ -178,32 +180,69 @@ export default function BulkUploadPage() {
       };
       try {
         // eslint-disable-next-line no-await-in-loop
-        await publishBook(payload);
+        const key = await publishBook(payload);
+        newlyPublishedKeys.push(key);
         published += 1;
       } catch (err) {
-        if (err.status === 409) duplicates.push({ d, payload });
-        // Any other failure shouldn't block the rest of the batch.
+        if (err.status === 409) {
+          duplicates.push({ d, payload });
+        } else {
+          // eslint-disable-next-line no-console
+          console.error(`Could not publish "${d.title}":`, err);
+          failed.push(d.title);
+        }
       }
     }
 
+    let cancelled = false;
     if (duplicates.length) {
       const shouldAddAnother = await confirmDuplicates(duplicates.map(({ d }) => d.title));
-      if (shouldAddAnother) {
-        for (const { payload } of duplicates) {
+      cancelled = !shouldAddAnother;
+      if (cancelled) {
+        // Cancelling means "don't publish anything from this run" — not
+        // just the duplicates. Otherwise the non-duplicate books in the same
+        // photo would already be added by the time the user finishes
+        // deciding about the duplicates, which isn't a decision they made —
+        // it happened automatically. Roll those back too, so nothing is
+        // added until the user re-picks via the checkboxes and publishes
+        // again, fully under their own control.
+        for (const key of newlyPublishedKeys) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            await removeListing(key);
+            published -= 1;
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('Could not roll back listing', key, err);
+          }
+        }
+        duplicates.forEach(({ d }) => failed.push(d.title));
+      } else {
+        for (const { d, payload } of duplicates) {
           try {
             // eslint-disable-next-line no-await-in-loop
             await publishBook(payload, { confirmDuplicate: true });
             published += 1;
-          } catch {
-            // Still failed even after confirming — skip it.
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error(`Could not publish "${d.title}" (after confirming duplicate):`, err);
+            failed.push(d.title);
           }
         }
       }
     }
 
     setPublishing(false);
-    showToast(`${published} book${published === 1 ? '' : 's'} added to My Shelf`);
-    router.push('/books');
+    if (cancelled) {
+      showToast("Nothing was added — uncheck the already-listed books and try again");
+    } else {
+      const addedMsg = `${published} book${published === 1 ? '' : 's'} added to My Shelf`;
+      showToast(failed.length ? `${addedMsg} — couldn't add: ${failed.join(', ')}` : addedMsg);
+    }
+    // Cancelling the duplicate prompt means nothing from this run should be
+    // added — keep the user right here so they can adjust the checkboxes and
+    // publish again, instead of bouncing them to My Shelf mid-decision.
+    if (!cancelled) router.push('/books');
   };
 
   return (
@@ -278,6 +317,12 @@ export default function BulkUploadPage() {
                 {allSelected ? 'Deselect all' : 'Select all'}
               </button>
             </div>
+
+            {detected.length === 1 && (
+              <NoteBox icon="info" style={{ marginTop: 10 }}>
+                <b>Only 1 book found in this photo — missed any, or is this the only one you're adding now?</b>
+              </NoteBox>
+            )}
 
             <div style={{ margin: '14px 0' }}>
               {detected.map((d) => {

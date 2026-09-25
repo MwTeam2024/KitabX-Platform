@@ -542,16 +542,6 @@ function ConditionPhotoGallery({ book, onZoom }) {
   return (
     <div>
       <div style={{ position: 'relative' }}>
-        {activeUrl && book.groupPhotoUrl && activeUrl === book.groupPhotoUrl && (
-          <div
-            style={{
-              background: 'var(--brand)', color: '#fff', borderRadius: 8,
-              padding: '8px 12px', fontSize: 12.5, textAlign: 'left', marginBottom: 8,
-            }}
-          >
-            This Book Is Part of the Bulk Upload: <b>{book.title}</b>
-          </div>
-        )}
         {activeUrl ? (
           <button
             type="button"
@@ -594,6 +584,16 @@ function ConditionPhotoGallery({ book, onZoom }) {
           </>
         )}
       </div>
+      {activeUrl && book.groupPhotoUrl && activeUrl === book.groupPhotoUrl && (
+        <div
+          style={{
+            background: 'var(--mint)', color: 'var(--brand-2)', borderRadius: 8,
+            padding: '8px 12px', fontSize: 12.5, textAlign: 'left', marginTop: 10,
+          }}
+        >
+          This Book Is Part of the Bulk Upload: <b>{book.title}</b>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '12px 0 22px' }}>
         {Array.from({ length: dotCount }, (_, i) => (
           <i key={i} className={`cp-dot${i === index ? ' on' : ''}`} />
