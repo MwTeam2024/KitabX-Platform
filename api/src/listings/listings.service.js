@@ -179,17 +179,16 @@ export class ListingsService {
     await this.prisma.$transaction(async (tx) => {
       if (Object.keys(data).length) await tx.bookListing.update({ where: { id }, data });
       if (updates.book) {
-        await tx.book.update({
-          where: { id: listing.bookId },
-          data: {
-            title: updates.book.title,
-            author: updates.book.author,
-            genre: updates.book.genre,
-            languageCode: updates.book.languageCode,
-            publicationYear: updates.book.publicationYear,
-            isbn13: updates.book.isbn13 || undefined,
-          },
-        });
+        // Re-point this listing at a (found-or-created) Book row for the
+        // edited details, instead of mutating `listing.bookId`'s row in
+        // place. That row is shared by every listing with the same book —
+        // editing one listing's title/author/etc used to silently rewrite
+        // what every other owner's listing of "the same book" displayed
+        // too. Re-pointing keeps an edit scoped to just this listing: other
+        // listings still on the old row are untouched, and if the edited
+        // details match an existing row, this listing simply joins it.
+        const book = await this._findOrCreateBookTx(tx, updates.book);
+        await tx.bookListing.update({ where: { id }, data: { bookId: book.id } });
       }
       if (updates.photoUrls) {
         if (updates.photoUrls.length > MAX_PHOTOS) {
