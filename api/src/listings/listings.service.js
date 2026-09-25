@@ -120,18 +120,29 @@ export class ListingsService {
         where: { OR: [isbn13 ? { isbn13 } : undefined, isbn10 ? { isbn10 } : undefined].filter(Boolean) },
       });
       if (existing) return existing;
-    } else {
-      // No ISBN to key off (common for older/obscure titles Google Books
-      // itself has no ISBN for). Without this, the same ISBN-less book
-      // picked twice from title/author search would silently create a
-      // second `Book` row each time, and the same-listing check below
-      // (keyed on bookId) would never catch the repeat. Also matching on
-      // publicationYear (when the caller supplies one) keeps two genuinely
-      // different, equally ISBN-less editions of the same title/author from
-      // wrongly collapsing into one Book row.
-      const existing = await tx.book.findFirst({
-        where: { title: bookData.title, author: bookData.author, publicationYear: bookData.publicationYear },
-      });
+    }
+    // No ISBN match (either none was supplied, or the caller's ISBN just
+    // doesn't match anything yet — Gemini/Google Books identification of the
+    // same physical cover isn't always consistent run to run, so the "same"
+    // book can arrive with a different ISBN, or a different/missing
+    // publicationYear, each time). Without this fallback, an
+    // unmatched/inconsistent ISBN would silently create a second `Book` row
+    // for what's really the same title, and the same-listing duplicate check
+    // below (keyed on bookId) would never catch the repeat.
+    //
+    // publicationYear is used as a tie-breaker, not a strict requirement: a
+    // missing year on either side (this scan's or the stored book's) never
+    // blocks the match, since that just means the extraction wasn't
+    // confident that run. But when BOTH sides do have a year and they
+    // genuinely differ, that's a real signal of two different
+    // editions/books sharing a title+author — those are kept as separate
+    // Book rows rather than being wrongly merged.
+    {
+      const where = { title: bookData.title, author: bookData.author };
+      if (bookData.publicationYear) {
+        where.OR = [{ publicationYear: null }, { publicationYear: bookData.publicationYear }];
+      }
+      const existing = await tx.book.findFirst({ where });
       if (existing) return existing;
     }
     return tx.book.create({
