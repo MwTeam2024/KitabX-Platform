@@ -52,9 +52,22 @@ export class ListingsService {
       // Block re-listing a book the owner already has live, unless they've
       // confirmed (via the frontend's "do you have another copy?" prompt)
       // that this is a genuinely separate physical copy.
+      //
+      // Matched on title+author(+year tie-breaker) — the same identity used
+      // to resolve `book` above — rather than strictly `bookId`. Older,
+      // pre-fallback-fix listings can still be sitting on a *different* Book
+      // row for what's really the same title (catalog fragmentation from
+      // before that fix existed), so a strict bookId match would miss an
+      // owner's own existing listing whenever this scan's ISBN happens to
+      // resolve straight to one of those other rows instead of the one the
+      // owner's existing listing is actually on.
       if (!payload.confirmDuplicate) {
+        const bookMatch = { title: book.title, author: book.author };
+        if (book.publicationYear) {
+          bookMatch.OR = [{ publicationYear: null }, { publicationYear: book.publicationYear }];
+        }
         const existingListing = await tx.bookListing.findFirst({
-          where: { bookId: book.id, ownerId, status: { in: ['ACTIVE', 'PAUSED', 'RESERVED'] } },
+          where: { ownerId, status: { in: ['ACTIVE', 'PAUSED', 'RESERVED'] }, book: bookMatch },
         });
         if (existingListing) {
           throw new ConflictException('You already have this book listed.');
