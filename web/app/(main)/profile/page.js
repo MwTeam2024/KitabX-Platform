@@ -150,7 +150,7 @@ export default function ProfilePage() {
         <div className="alert-banner">
           <span className="abk"><Icon name="gift" />Invite friends</span>
           <h4>Get 1 free credit for every friend who joins!</h4>
-          <p>Share your invite link — they get 1 free credit too, the moment they sign up.</p>
+          <p>Share your invite link — you both get 1 free credit when they sign up.</p>
           <button className="btn btn-white btn-sm" onClick={handleShareReferral}>
             <Icon name="share" style={{ width: 12, height: 12 }} />Share my invite link
           </button>
