@@ -21,17 +21,15 @@ const PICKUP_DATE_FORMAT = new Intl.DateTimeFormat('en-GB', { weekday: 'short', 
 export function nextPickupDates(count = 3, from = new Date()) {
   return Array.from({ length: count }, (_, i) => {
     const d = new Date(from);
-    d.setDate(d.getDate() + i + 1);
+    d.setDate(d.getDate() + i);
     return PICKUP_DATE_FORMAT.format(d);
   });
 }
 
-/** Tomorrow's date as `YYYY-MM-DD`, for the "Others" date input's `min` — pickup
- * dates never include today, matching `nextPickupDates` starting at `i + 1`. */
-export function tomorrowIsoDate() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+/** Today's date as `YYYY-MM-DD`, for the "Others" date input's `min` — pickup
+ * dates can start today, matching `nextPickupDates` starting at `i`. */
+export function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 /** Formats a raw `YYYY-MM-DD` (from an `<input type="date">`) into the same

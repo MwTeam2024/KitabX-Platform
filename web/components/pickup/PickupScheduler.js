@@ -13,7 +13,7 @@ import { useSheet } from '@/components/ui/SheetProvider';
 import { useToast } from '@/components/ui/ToastProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { useInterval } from '@/hooks/useInterval';
-import { nextPickupDates, formatPickupDate, tomorrowIsoDate } from '@/lib/dates';
+import { nextPickupDates, formatPickupDate, todayIsoDate } from '@/lib/dates';
 import { useIsClient } from '@/hooks/useClientOnly';
 import { PICKUP_POINTS, PICKUP_TIME_SLOTS } from '@/lib/constants';
 import { firstName } from '@/lib/exchange';
@@ -237,7 +237,7 @@ export default function PickupScheduler({ exchangeId }) {
                       onChange={setPickedDate}
                       allowOther
                       otherType="date"
-                      otherMin={tomorrowIsoDate()}
+                      otherMin={todayIsoDate()}
                       formatOther={formatPickupDate}
                     />
                   )
@@ -321,7 +321,7 @@ function SuggestTimeForm({ dates, pickup, onSubmit }) {
               onChange={setPickedDate}
               allowOther
               otherType="date"
-              otherMin={tomorrowIsoDate()}
+              otherMin={todayIsoDate()}
               formatOther={formatPickupDate}
             />
           )
