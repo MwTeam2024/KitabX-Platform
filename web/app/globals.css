@@ -71,7 +71,7 @@ a{color:inherit;text-decoration:none}
 .pad-nav{padding-bottom:24px}
 
 /* ===== header (curved cream/gold) ===== */
-.hdr{background:linear-gradient(165deg, #f4f0e6 0%, #f4f0e6 55%, #c4baa0 150%);border-radius:0 0 26px 26px;padding:18px 16px 30px;flex-shrink:0;position:relative;overflow:hidden}
+.hdr{background:linear-gradient(165deg, #f4f0e6 0%, #f4f0e6 55%, #c4baa0 150%);border-radius:0 0 26px 26px;padding:calc(18px + env(safe-area-inset-top)) 16px 30px;flex-shrink:0;position:relative;overflow:hidden}
 .hdr-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .logo-badge{display:block;background-image:url('/logo.png');background-repeat:no-repeat;background-position:center;background-size:contain;border-radius:13px;padding:6px 11px;height:41px;aspect-ratio:827/302;flex-shrink:0}
 .hdr-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
