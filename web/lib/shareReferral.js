@@ -14,10 +14,17 @@ const SHARE_TEXT = "Join me on KitabX — give a book, get a book! Sign up with 
 export async function shareReferral(code) {
   const url = buildReferralUrl(code);
   if (!url) return 'failed';
+  const fullText = `${SHARE_TEXT} ${url}`;
 
   if (typeof navigator !== 'undefined' && navigator.share) {
     try {
-      await navigator.share({ title: 'KitabX', text: SHARE_TEXT, url });
+      // The link deliberately isn't passed as its own `url` field — iOS's
+      // share sheet treats a separate `url` as a link-preview attachment
+      // rather than clipboard text, so its own "Copy" action can silently
+      // drop the link while "Copy" still works fine when it's folded into
+      // `text` (confirmed: direct-send targets like WhatsApp got the link
+      // fine either way, only "Copy" was affected).
+      await navigator.share({ title: 'KitabX', text: fullText });
       return 'shared';
     } catch (err) {
       if (err?.name === 'AbortError') return 'cancelled';
@@ -26,7 +33,7 @@ export async function shareReferral(code) {
   }
 
   try {
-    await navigator.clipboard.writeText(`${SHARE_TEXT} ${url}`);
+    await navigator.clipboard.writeText(fullText);
     return 'copied';
   } catch {
     return 'failed';
