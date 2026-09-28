@@ -23,6 +23,8 @@ model User {
   profileImageUrl     String?                     @map("profile_image_url")
   bio                 String?
   memberId            String                      @unique @map("member_id")
+  referralCode        String                      @unique @map("referral_code")
+  referredById        String?                     @map("referred_by_id")
   cityId              String?                     @map("city_id")
   areaId              String?                     @map("area_id")
   societyId           String?                     @map("society_id")
@@ -67,8 +69,11 @@ model User {
   city                City?                       @relation(fields: [cityId], references: [id])
   society             Society?                    @relation(fields: [societyId], references: [id])
   wishlist            Wishlist[]
+  referredBy          User?                       @relation("Referrals", fields: [referredById], references: [id])
+  referrals           User[]                      @relation("Referrals")
 
   @@index([societyId])
+  @@index([referredById])
   @@map("users")
 }
 
@@ -706,6 +711,7 @@ enum CreditTransactionType {
   REQUEST_EXPIRED
   EXCHANGE_COMPLETED
   ADMIN_ADJUSTMENT
+  REFERRAL
 }
 
 enum CreditTransactionStatus {

@@ -1,12 +1,16 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { notificationsService } from '@/services/notifications.service';
 
-const TYPE_EMOJI = { REQUEST: '📚', PICKUP: '🕒', EXCHANGE: '✅', WISHLIST: '💛', ADMIN: '🛡️', VERIFICATION: '🛡️', REPORT: '🚩' };
+const TYPE_EMOJI = {
+  REQUEST: '📚', PICKUP: '🕒', EXCHANGE: '✅', WISHLIST: '💛', ADMIN: '🛡️',
+  VERIFICATION: '🛡️', REPORT: '🚩', REFERRAL: '🎁',
+};
 
 function toDeepLink(n) {
   if (n.entityType === 'exchange') return `/exchanges/${n.entityId}`;
   if (n.entityType === 'book_request') return '/requests';
   if (n.entityType === 'listing') return `/books/${n.entityId}`;
+  if (n.type === 'REFERRAL') return '/profile';
   return undefined;
 }
 

@@ -13,6 +13,7 @@ import { useAppSheets } from '@/hooks/useAppSheets';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/ToastProvider';
 import { SUPPORT_WHATSAPP_LINK } from '@/lib/constants';
+import { shareReferral } from '@/lib/shareReferral';
 
 /** Screen 19 — public trust profile plus help & support (§Module 2, §13). */
 export default function ProfilePage() {
@@ -53,6 +54,12 @@ export default function ProfilePage() {
       // Clipboard unavailable — the id is still visible on screen.
     }
     showToast('Member ID copied');
+  };
+
+  const handleShareReferral = async () => {
+    const result = await shareReferral(user.referralCode);
+    if (result === 'copied') showToast('Referral link copied — share it to earn 1 credit!');
+    else if (result === 'failed') showToast('Could not share right now — try again');
   };
 
   const menu = [
@@ -138,6 +145,15 @@ export default function ProfilePage() {
           <div className="sf">
             <Icon name="coin" /><b>{credits.available}</b><span>Credits</span>
           </div>
+        </div>
+
+        <div className="alert-banner">
+          <span className="abk"><Icon name="gift" />Invite friends</span>
+          <h4>Get 1 free credit for every friend who joins!</h4>
+          <p>Share your invite link — they get 1 free credit too, the moment they sign up.</p>
+          <button className="btn btn-white btn-sm" onClick={handleShareReferral}>
+            <Icon name="share" style={{ width: 12, height: 12 }} />Share my invite link
+          </button>
         </div>
 
         <div style={{ margin: '22px 16px 12px' }}>

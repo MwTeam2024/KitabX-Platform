@@ -6,9 +6,10 @@ import { SmsService } from './sms.service';
 import { EmailService } from './email.service';
 import { OAuthService } from './oauth.service';
 import { SocietiesModule } from '../societies/societies.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [SocietiesModule],
+  imports: [SocietiesModule, NotificationsModule],
   controllers: [AuthController],
   providers: [AuthService, OtpService, SmsService, EmailService, OAuthService],
   // OtpService/OAuthService are reused by AdminModule for admin login (§21).

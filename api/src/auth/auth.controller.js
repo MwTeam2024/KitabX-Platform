@@ -142,6 +142,7 @@ export class AuthController {
       longitude: body.longitude,
       acceptedTerms: body.acceptedTerms,
       locationRequest: body.locationRequest,
+      referralCode: body.referralCode,
     });
 
     this.authService.issueSession(res, user);
@@ -221,6 +222,7 @@ export class AuthController {
       longitude: body.longitude,
       acceptedTerms: body.acceptedTerms,
       locationRequest: body.locationRequest,
+      referralCode: body.referralCode,
     });
 
     this.authService.issueSession(res, user);

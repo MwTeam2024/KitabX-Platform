@@ -102,6 +102,24 @@ export async function reverseAvailableCredit(tx, { userId, referenceId, bookTitl
   });
 }
 
+/** Referral program: fires once, the instant the referred user completes
+ * signup (OTP verified) — not gated on verification or a first listing, so
+ * both sides get the "instant reward" feeling that makes sharing worth it.
+ * Called once per side (referrer and new user each get their own call) from
+ * inside the same signup transaction that creates the new user row. */
+export async function grantReferralCredit(tx, { userId, referenceId, description }) {
+  await tx.creditAccount.update({ where: { userId }, data: { availableBalance: { increment: 1 } } });
+  await logTransaction(tx, {
+    userId,
+    type: 'REFERRAL',
+    amount: 1,
+    status: 'COMPLETED',
+    referenceType: 'referral',
+    referenceId,
+    description,
+  });
+}
+
 /** §21: admin manual correction, always requires a reason for the audit trail. */
 export async function adminAdjustCredit(tx, { userId, amount, reason }) {
   const account = await tx.creditAccount.update({ where: { userId }, data: { availableBalance: { increment: amount } } });

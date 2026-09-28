@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Icon from '@/components/ui/Icon';
 import InstallPrompt from '@/components/onboarding/InstallPrompt';
+import ReferralCapture from '@/components/auth/ReferralCapture';
 
 export const metadata = {
   title: 'Welcome — KitabX',
@@ -14,6 +15,7 @@ export const metadata = {
 export default function WelcomePage() {
   return (
     <div className="app-scroll welcome-screen">
+      <ReferralCapture />
       <div className="welcome-mark">
         <div className="logo-badge welcome-logo" />
         <p className="welcome-tagline">Give a book, Get a book</p>

@@ -13,6 +13,7 @@ import TermsGate from './TermsGate';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/ToastProvider';
 import { authService } from '@/services/auth.service';
+import { captureReferralCode, getStoredReferralCode, clearStoredReferralCode } from '@/lib/referral';
 
 const RESEND_SECONDS = 30;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -69,6 +70,17 @@ export default function AuthForm({ initialTab = 'signup' }) {
     if (isAuthenticated) router.replace('/home');
   }, [isAuthenticated, router]);
 
+  // Covers a referral link pointing straight at /login?tab=signup&ref=...
+  // (the /welcome?ref=... case is captured there instead, before this page
+  // is ever reached — see components/auth/ReferralCapture.js). Re-reads
+  // storage after capturing since the initial `form` state above was
+  // computed before this URL's own `?ref=` could have been stashed.
+  useEffect(() => {
+    captureReferralCode();
+    const code = getStoredReferralCode();
+    if (code) setForm((f) => (f.referralCode === code ? f : { ...f, referralCode: code }));
+  }, []);
+
   const [tab, setTab] = useState(initialTab);
   const [form, setForm] = useState({
     firstName: signupDraft.firstName || '',
@@ -83,6 +95,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
     longitude: signupDraft.longitude,
     cityText: signupDraft.cityText,
     locationRequest: signupDraft.locationRequest || null,
+    referralCode: getStoredReferralCode(),
   });
   const [accepted, setAccepted] = useState(signupDraft.acceptedTerms);
 
@@ -177,6 +190,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
     longitude: form.longitude,
     acceptedTerms: accepted,
     locationRequest: form.locationRequest || undefined,
+    referralCode: form.referralCode || undefined,
   });
 
   const chooseChannel = async (ch) => {
@@ -233,6 +247,7 @@ export default function AuthForm({ initialTab = 'signup' }) {
         }));
       }
       setSession(user);
+      clearStoredReferralCode();
       if (form.locationRequest) {
         showToast(`Your request to add ${form.locationRequest.societyName}, ${form.locationRequest.cityName} has reached the admin`);
       }

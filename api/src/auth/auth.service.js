@@ -3,22 +3,29 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocietiesService } from '../societies/societies.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { grantReferralCredit } from '../credits/credits.tx';
 
 const USER_INCLUDE = { society: true, block: true, city: true, area: true };
+
+// Excludes 0/O and 1/I/L — easy to misread when someone retypes a code by
+// hand instead of following the link.
+const REFERRAL_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 /**
  * Owns the session lifecycle: find-or-create the user row after a verified
  * OTP, and issue/clear the httpOnly cookie the frontend already sends with
  * every request (`credentials: 'include'` in lib/api-client.js).
  */
-@Dependencies(PrismaService, JwtService, ConfigService, SocietiesService)
+@Dependencies(PrismaService, JwtService, ConfigService, SocietiesService, NotificationsService)
 @Injectable()
 export class AuthService {
-  constructor(prisma, jwt, config, societies) {
+  constructor(prisma, jwt, config, societies, notifications) {
     this.prisma = prisma;
     this.jwt = jwt;
     this.config = config;
     this.societies = societies;
+    this.notifications = notifications;
   }
 
   async findUserByPhone(phone) {
@@ -44,6 +51,18 @@ export class AuthService {
     }
 
     const memberId = await this.generateMemberId();
+    const referralCode = await this.generateReferralCode();
+
+    // An unknown/malformed code is just ignored rather than blocking signup
+    // — the whole point is a smoother signup, not a new way to fail one.
+    // Self-referral can't happen structurally: the referrer has to already
+    // exist, and this is by definition a brand-new phone number/account.
+    let referrer = null;
+    if (profile.referralCode) {
+      referrer = await this.prisma.user.findUnique({
+        where: { referralCode: profile.referralCode.trim().toUpperCase() },
+      });
+    }
 
     // A society picker with nothing that matches yet — rather than leaving
     // the member with no society at all until an admin gets to the request
@@ -70,6 +89,8 @@ export class AuthService {
         data: {
           phone,
           memberId,
+          referralCode,
+          referredById: referrer?.id || null,
           name: profile.name || 'New Member',
           email: profile.email || null,
           cityId: requestedSociety ? requestedSociety.city.id : (profile.cityId || null),
@@ -102,8 +123,54 @@ export class AuthService {
         });
       }
 
+      // Both sides rewarded the instant the new member finishes OTP
+      // verification — not gated on later verification or a first listing,
+      // so the "invite a friend, get a credit" pitch pays off immediately
+      // for both of them, which is what makes it worth sharing in the
+      // first place.
+      if (referrer) {
+        await grantReferralCredit(tx, {
+          userId: referrer.id,
+          referenceId: user.id,
+          description: `Referral bonus — ${user.name} joined using your invite`,
+        });
+        await grantReferralCredit(tx, {
+          userId: user.id,
+          referenceId: referrer.id,
+          description: `Referral bonus — you joined using ${referrer.name}'s invite`,
+        });
+        await this.notifications.create(tx, {
+          userId: referrer.id,
+          type: 'REFERRAL',
+          title: 'You earned 1 credit! 🎉',
+          body: `${user.name} joined KitabX using your invite link.`,
+          entityType: 'user',
+          entityId: user.id,
+        });
+        await this.notifications.create(tx, {
+          userId: user.id,
+          type: 'REFERRAL',
+          title: 'Welcome bonus: 1 credit! 🎉',
+          body: `You earned 1 credit for joining via ${referrer.name}'s invite link.`,
+          entityType: 'user',
+          entityId: referrer.id,
+        });
+      }
+
       return user;
     });
+  }
+
+  async generateReferralCode() {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      let code = '';
+      for (let i = 0; i < 6; i += 1) {
+        code += REFERRAL_CODE_ALPHABET[Math.floor(Math.random() * REFERRAL_CODE_ALPHABET.length)];
+      }
+      const clash = await this.prisma.user.findUnique({ where: { referralCode: code } });
+      if (!clash) return code;
+    }
+    throw new ConflictException('Could not allocate a referral code — please retry');
   }
 
   async generateMemberId() {

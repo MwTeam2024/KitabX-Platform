@@ -7,11 +7,14 @@ import Icon from '@/components/ui/Icon';
 import { useAppData } from '@/contexts/AppDataContext';
 import { toggleNotifPanel, toggleCreditPanel } from '@/store/slices/uiSlice';
 import { fetchNotifications, markAllRead, unreadCount } from '@/store/slices/notificationSlice';
+import { useToast } from '@/components/ui/ToastProvider';
+import { shareReferral } from '@/lib/shareReferral';
 
 /** The credit pill + bell + avatar cluster repeated in every main-app header. */
 export default function HeaderActions({ avatarHref = '/profile', compact = false }) {
   const dispatch = useDispatch();
   const { credits } = useAppData();
+  const showToast = useToast();
   const unread = useSelector(unreadCount);
   const notifOpen = useSelector((s) => s.ui.isNotifOpen);
   const user = useSelector((s) => s.auth.user);
@@ -25,6 +28,12 @@ export default function HeaderActions({ avatarHref = '/profile', compact = false
     dispatch(toggleNotifPanel());
   };
 
+  const handleShare = async () => {
+    const result = await shareReferral(user?.referralCode);
+    if (result === 'copied') showToast('Referral link copied — share it to earn 1 credit!');
+    else if (result === 'failed') showToast('Could not share right now — try again');
+  };
+
   return (
     <div className="hdr-right">
       <button
@@ -35,6 +44,9 @@ export default function HeaderActions({ avatarHref = '/profile', compact = false
       >
         <span className="credit-num">{credits.available}</span>
         {!compact && 'credits'}
+      </button>
+      <button className="circle-btn" onClick={handleShare} aria-label="Invite a friend — earn 1 credit">
+        <Icon name="share" />
       </button>
       <button
         className="circle-btn"

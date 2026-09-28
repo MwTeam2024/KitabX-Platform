@@ -38,6 +38,7 @@ export function toSelfUser(user) {
     city: user.city ? { id: user.city.id, name: user.city.name } : null,
     area: user.area ? { id: user.area.id, name: user.area.name } : null,
     acceptedTermsAt: user.acceptedTermsAt,
+    referralCode: user.referralCode,
   };
 }
 
