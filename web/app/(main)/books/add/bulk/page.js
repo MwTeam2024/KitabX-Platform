@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/ToastProvider';
 import { booksService } from '@/services/books.service';
 import { uploadsService } from '@/services/uploads.service';
 import { useSheet } from '@/components/ui/SheetProvider';
+import { takePendingBulkPhoto } from '@/lib/pendingBulkPhoto';
 
 function DuplicateListingConfirm({ titles, onConfirm, onCancel }) {
   return (
@@ -78,6 +79,15 @@ export default function BulkUploadPage() {
   const timers = useRef([]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  // A photo handed off from the ISBN-scan "not found" fallback — start
+  // scanning immediately instead of showing the upload screen again, since
+  // the user already picked/took this photo there.
+  useEffect(() => {
+    const pending = takePendingBulkPhoto();
+    if (pending) runScan(pending);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const runScan = async (file) => {
     setPhase('scanning');

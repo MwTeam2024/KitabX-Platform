@@ -10,6 +10,8 @@ import { coverForDraft, useBookDraft } from '@/contexts/BookDraftContext';
 import { booksService } from '@/services/books.service';
 import { startScan as startCameraScan, isValidIsbnBarcode } from '@/lib/barcode';
 import { useToast } from '@/components/ui/ToastProvider';
+import { setPendingBulkPhoto } from '@/lib/pendingBulkPhoto';
+import { resizeImageFile } from '@/lib/image';
 
 /**
  * getUserMedia failures all surface through one generic error, but the fix
@@ -50,6 +52,7 @@ export default function ScanIsbnPage() {
   const [scanNonce, setScanNonce] = useState(0);
   const videoRef = useRef(null);
   const stopScanRef = useRef(null);
+  const coverInputRef = useRef(null);
 
   useEffect(() => () => stopScanRef.current?.(), []);
 
@@ -83,6 +86,22 @@ export default function ScanIsbnPage() {
   const startScan = () => {
     setCameraError(null);
     setState('scanning');
+  };
+
+  // ISBN scanning only works when Google Books/Open Library actually carry
+  // that ISBN — for a book they don't have, the cover-photo identification
+  // flow (§6B) still works. This hands the picked photo off to that screen
+  // and has it start scanning immediately, without ever surfacing to the
+  // user that it's the same underlying "bulk upload" feature.
+  const useCoverPhotoInstead = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setPendingBulkPhoto(await resizeImageFile(file, { maxWidth: 1600, quality: 0.85 }));
+    } catch {
+      setPendingBulkPhoto(file);
+    }
+    router.push('/books/add/bulk');
   };
 
   useEffect(() => {
@@ -213,12 +232,22 @@ export default function ScanIsbnPage() {
         {state === 'notfound' && (
           <EmptyState
             icon="🔎"
-            title="No match for that ISBN."
-            hint="You can still add the book by typing the details yourself."
+            title="This book isn't available for ISBN scanning."
+            hint="We couldn't find it in the book database. Try this instead:"
             action={
-              <button className="btn btn-primary" onClick={() => router.push('/books/add/details')}>
-                Enter details manually
-              </button>
+              <>
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  hidden
+                  onChange={useCoverPhotoInstead}
+                />
+                <button className="btn btn-primary" onClick={() => coverInputRef.current?.click()}>
+                  Try uploading a cover photo
+                </button>
+              </>
             }
           />
         )}
