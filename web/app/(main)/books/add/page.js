@@ -68,24 +68,21 @@ export default function AddBookMethodPage() {
 
         <button
           className="card"
-          style={{
-            display: 'flex', gap: 14, width: '100%', textAlign: 'left', border: 'none',
-            background: 'linear-gradient(160deg,#1B5E37,var(--brand-deep))',
-          }}
+          style={{ display: 'flex', gap: 14, width: '100%', textAlign: 'left', border: 'none' }}
           onClick={() => router.push('/books/add/bulk')}
         >
           <div
             className="stat-ic"
-            style={{ margin: 0, width: 44, height: 44, flexShrink: 0, background: 'rgba(255,255,255,.16)', color: '#fff' }}
+            style={{ margin: 0, width: 44, height: 44, flexShrink: 0, background: 'var(--mint)', color: 'var(--brand-2)' }}
           >
             <Icon name="layers" style={{ width: 19, height: 19 }} />
           </div>
           <div>
-            <b style={{ fontSize: 14, color: '#fff' }}>
+            <b style={{ fontSize: 14 }}>
               Single & Bulk Book Upload with AI
-              <span className="new-pill" style={{ background: 'rgba(255,255,255,.2)', color: '#fff' }}>New</span>
+              <span className="new-pill">New</span>
             </b>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.75)', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
               Upload one book or multiple books — AI finds every title for you
             </div>
           </div>
