@@ -29,7 +29,15 @@ export default function MyShelfPage() {
   useEffect(() => { refreshMyBooks().catch(() => {}); }, [refreshMyBooks]);
 
   const groups = useMemo(() => {
-    const mine = Object.values(books).filter((b) => b.mine);
+    // `books` is a keyed map, not an array — Object.values() only reflects
+    // whichever order each key was first inserted in (e.g. an earlier
+    // discovery/search fetch could've cached a listing before this page's
+    // own fetch ever ran), not `createdAt`. A freshly published book is a
+    // brand-new key, so without this sort it always landed at the end
+    // instead of at the top.
+    const mine = Object.values(books)
+      .filter((b) => b.mine)
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     return {
       mybooks: mine.filter((b) => b.status !== GIVEN && b.status !== RECEIVED),
       received: mine.filter((b) => b.status === RECEIVED),

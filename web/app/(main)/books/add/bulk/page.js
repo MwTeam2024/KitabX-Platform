@@ -149,12 +149,18 @@ export default function BulkUploadPage() {
       // anything) — so closing the sheet via the X/backdrop, which fires
       // onClose instead of onConfirm/onCancel, still resolves this and
       // never leaves the publish loop (and the "Adding…" button) stuck.
+      // The real decision's resolve() must run BEFORE closeSheet() — closeSheet
+      // itself triggers onClose (-> resolve(false)) as a side effect, and
+      // since only the first resolve() on a Promise ever counts, calling
+      // closeSheet() first let that resolve(false) sometimes race ahead of
+      // "Yes, add them again"'s own resolve(true), intermittently treating a
+      // confirmed Yes as a Cancel.
       openSheet(
         'Already listed',
         <DuplicateListingConfirm
           titles={titles}
-          onConfirm={() => { closeSheet(); resolve(true); }}
-          onCancel={() => { closeSheet(); resolve(false); }}
+          onConfirm={() => { resolve(true); closeSheet(); }}
+          onCancel={() => { resolve(false); closeSheet(); }}
         />,
         { onClose: () => resolve(false) },
       );

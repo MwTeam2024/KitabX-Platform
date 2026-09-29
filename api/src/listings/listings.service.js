@@ -368,6 +368,11 @@ export class ListingsService {
       loc: toBookListingLocation(listing, { revealFull }),
       photos: listing.photos.map((p) => p.imageUrl),
       groupPhotoUrl: listing.photos.find((p) => p.imageType === 'OTHER')?.imageUrl || null,
+      // Raw timestamp for the frontend to sort by — `books` is a keyed map,
+      // not an array, so its own iteration order only reflects whichever
+      // key was inserted first (e.g. from an earlier search/discovery
+      // fetch), not `createdAt`. Newest-first display has to sort on this.
+      createdAt: listing.createdAt,
       listedDaysAgo: Math.max(0, Math.floor((Date.now() - new Date(listing.createdAt).getTime()) / 86400000)),
       tags: [listing.condition, listing.book.genre].filter(Boolean),
     };
