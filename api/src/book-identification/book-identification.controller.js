@@ -57,13 +57,28 @@ export class BookIdentificationController {
           if (candidate.isbn) {
             return { ...(await this.googleBooks.lookupByIsbn(candidate.isbn)), confidence: candidate.confidence };
           }
-          const results = await this.googleBooks.searchByTitleOrAuthor(
-            `${candidate.title} ${candidate.author || ''}`.trim(),
+          const results = await this.googleBooks.searchByTitleAndAuthor(
+            candidate.title,
+            candidate.author,
             { limit: 1 },
           );
-          return results[0]
-            ? { ...results[0], confidence: candidate.confidence }
-            : { ...candidate, confidence: 'low', unmatched: true };
+          const match = results[0];
+          if (!match) return { ...candidate, confidence: 'low', unmatched: true };
+          return {
+            ...match,
+            // The catalog match is preferred (more complete/accurately
+            // formatted than Gemini's own read), but a fuzzy title search
+            // can land on the wrong book in the same series — one that's
+            // real but missing its own author in Google Books/Open
+            // Library's data. Confirmed live: Gemini correctly read the
+            // author straight off the cover in that exact case, so falling
+            // back to it here beats surfacing "Unknown Author" for a book
+            // whose author was clearly legible in the photo.
+            author: (!match.author || match.author === 'Unknown Author') && candidate.author
+              ? candidate.author
+              : match.author,
+            confidence: candidate.confidence,
+          };
         } catch {
           return { ...candidate, confidence: 'low', unmatched: true };
         }

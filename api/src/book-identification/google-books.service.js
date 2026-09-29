@@ -4,6 +4,10 @@ import { RedisService } from '../common/redis/redis.service';
 
 const CACHE_TTL_SECONDS = 60 * 60 * 24; // §7: cache ISBN lookups in Redis.
 
+// Open Library's default search response omits isbn (and some of the other
+// fields we need) unless explicitly asked for.
+const OPEN_LIBRARY_SEARCH_FIELDS = 'title,subtitle,author_name,cover_i,first_publish_year,isbn,publisher,subject,language,number_of_pages_median';
+
 /**
  * Google Books lookups happen server-side (§7, §18) so the API key — when one
  * is configured — never reaches the browser. The public Google Books endpoint
@@ -73,6 +77,36 @@ export class GoogleBooksService {
     return this._searchOpenLibrary(query, limit);
   }
 
+  /**
+   * For callers (Gemini candidate matching) that already know title and
+   * author as separate, distinct fields — as opposed to the free-text
+   * `searchByTitleOrAuthor` above, meant for a person typing one query box.
+   * Google's `intitle:`/`inauthor:` field operators score far more
+   * precisely than a bare "title author" keyword soup: confirmed live that
+   * the same book which came back as a wrong same-series title via the
+   * plain search matched exactly right once title/author were scoped this
+   * way. Falls back to the plain combined-string search when the scoped
+   * query comes back empty — a real book occasionally isn't indexed with
+   * fields clean enough for `intitle`/`inauthor` to hit (unconventional
+   * author formatting, a subtitle folded into the main title, etc.).
+   */
+  async searchByTitleAndAuthor(title, author, { limit = 10 } = {}) {
+    const scoped = [`intitle:"${title}"`, author && `inauthor:"${author}"`].filter(Boolean).join(' ');
+    const scopedResults = await this._searchGoogleBooks(scoped, limit);
+    if (scopedResults.length) return scopedResults;
+
+    // Open Library has its own separate `title=`/`author=` params (not
+    // Google's `intitle:`/`inauthor:` syntax) — confirmed live that it's
+    // just as precise there: the same title/author scoping that fixed the
+    // Google Books mismatch also returned exactly one, correct match on
+    // Open Library. Tried here, before falling all the way back to the
+    // loose combined-string search on both.
+    const structuredOpenLibraryResults = await this._searchOpenLibraryStructured(title, author, limit);
+    if (structuredOpenLibraryResults.length) return structuredOpenLibraryResults;
+
+    return this.searchByTitleOrAuthor(`${title} ${author || ''}`.trim(), { limit });
+  }
+
   async _searchGoogleBooks(query, limit) {
     try {
       const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=${limit}${this._apiKeyParam()}`;
@@ -85,17 +119,35 @@ export class GoogleBooksService {
   }
 
   async _searchOpenLibrary(query, limit) {
+    return this._fetchOpenLibrarySearch(
+      `q=${encodeURIComponent(query)}`,
+      limit,
+      'Open Library search failed',
+    );
+  }
+
+  /**
+   * Open Library's own separate `title=`/`author=` params, as opposed to
+   * `_searchOpenLibrary`'s single free-text `q=` — the same precision gain
+   * as Google's `intitle:`/`inauthor:`, confirmed live: the exact
+   * title/author pair that fixed the Google Books same-series mismatch
+   * also returned one correct match here instead of the noisier results a
+   * bare keyword search can turn up.
+   */
+  async _searchOpenLibraryStructured(title, author, limit) {
+    const params = [`title=${encodeURIComponent(title)}`, author && `author=${encodeURIComponent(author)}`].filter(Boolean).join('&');
+    return this._fetchOpenLibrarySearch(params, limit, 'Open Library structured search failed');
+  }
+
+  async _fetchOpenLibrarySearch(queryParams, limit, warnMessage) {
     try {
-      // fields must be listed explicitly — Open Library's default response
-      // omits isbn (and some of the other fields we need) otherwise.
-      const fields = 'title,subtitle,author_name,cover_i,first_publish_year,isbn,publisher,subject,language,number_of_pages_median';
-      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${limit}&fields=${fields}`;
+      const url = `https://openlibrary.org/search.json?${queryParams}&limit=${limit}&fields=${OPEN_LIBRARY_SEARCH_FIELDS}`;
       const res = await fetch(url);
       if (!res.ok) return [];
       const data = await res.json();
       return (data?.docs || []).map((doc) => this._normalizeOpenLibrarySearchDoc(doc));
     } catch (err) {
-      this.logger.warn(`Open Library search failed: ${err.message}`);
+      this.logger.warn(`${warnMessage}: ${err.message}`);
       return [];
     }
   }
