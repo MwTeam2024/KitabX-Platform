@@ -17,22 +17,31 @@ import { useSheet } from '@/components/ui/SheetProvider';
 import { takePendingBulkPhoto } from '@/lib/pendingBulkPhoto';
 
 function DuplicateListingConfirm({ titles, onConfirm, onCancel }) {
+  const multiple = titles.length > 1;
   return (
     <>
       <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '-8px 0 12px' }}>
-        {titles.length === 1
-          ? <>You already have &quot;{titles[0]}&quot; listed. If you have another physical copy to give away, you can list it again.</>
-          : `You already have ${titles.length} of these books listed. If you have another physical copy of each, you can list them again.`}
+        {multiple
+          ? `You already have ${titles.length} of these books listed. If you have another physical copy of every one of them, you can list them all again.`
+          : <>You already have &quot;{titles[0]}&quot; listed. If you have another physical copy to give away, you can list it again.</>}
       </div>
-      {titles.length > 1 && (
-        <ul style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 16px', paddingLeft: 18 }}>
+      {multiple && (
+        <ul style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 10px', paddingLeft: 18 }}>
           {titles.map((t) => <li key={t}>{t}</li>)}
         </ul>
       )}
+      {multiple && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>
+          Only have a spare copy of some of these? Tap &quot;Go back &amp; edit selection&quot;, uncheck the
+          one(s) you don&apos;t, then add the rest again.
+        </div>
+      )}
       <button className="btn btn-primary" onClick={onConfirm} style={{ marginBottom: 8 }}>
-        {titles.length === 1 ? 'Yes, I have another copy' : 'Yes, add them again'}
+        {multiple ? 'Yes, I have another copy of all of them' : 'Yes, I have another copy'}
       </button>
-      <button className="btn btn-outline" onClick={onCancel}>Cancel</button>
+      <button className="btn btn-outline" onClick={onCancel}>
+        {multiple ? 'Go back & edit selection' : 'Cancel'}
+      </button>
     </>
   );
 }

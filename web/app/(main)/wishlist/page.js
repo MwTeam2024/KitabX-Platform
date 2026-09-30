@@ -61,7 +61,7 @@ export default function WishlistPage() {
             <span className="abk"><Icon name="bell" />Wishlist alert</span>
             <h4>{alertBook.title} is available near you!</h4>
             <p>Listed by {alertBook.ownerName}</p>
-            <button className="btn btn-white btn-sm" onClick={() => router.push(`/books/${alertBook.key}`)}>
+            <button className="btn btn-primary btn-sm" onClick={() => router.push(`/books/${alertBook.key}`)}>
               Request this book<Icon name="arrowRight" style={{ width: 12, height: 12 }} />
             </button>
           </div>
