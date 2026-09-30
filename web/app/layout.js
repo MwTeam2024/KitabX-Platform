@@ -1,6 +1,12 @@
+import { Merriweather, Nunito_Sans } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import ServiceWorkerRegistrar from "@/components/pwa/ServiceWorkerRegistrar";
+
+// Self-hosted via next/font — feeds globals.css's `--font-display`/
+// `--font-body` variables (see there for the fallback stack).
+const merriweather = Merriweather({ subsets: ["latin"], weight: ["700"], variable: "--font-merriweather" });
+const nunitoSans = Nunito_Sans({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--font-nunito" });
 
 export const metadata = {
   title: {
@@ -38,7 +44,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${merriweather.variable} ${nunitoSans.variable}`}>
       <body>
         <Providers>
           {children}

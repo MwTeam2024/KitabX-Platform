@@ -53,6 +53,9 @@ export default function HomePage() {
 
   const { books } = useBooks({ keys: discoveryKeys, genre, sort });
   const sortLabel = SORT_OPTIONS.find((o) => o.key === sort)?.label ?? 'Newest';
+  // How many distinct filter facets are active — surfaced as a number on the
+  // filter icon so it's clear at a glance without opening the sheet.
+  const filterCount = [genre !== 'All', !!language, !!condition].filter(Boolean).length;
 
   const openSort = () => {
     openSheet('Sort by', (
@@ -128,6 +131,7 @@ export default function HomePage() {
           sortLabel={sortLabel}
           onSort={openSort}
           onFilters={openFilters}
+          filterCount={filterCount}
         />
 
         <BookGrid
