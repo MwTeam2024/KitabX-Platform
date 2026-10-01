@@ -165,7 +165,7 @@ export class RequestsService {
         title: 'Request accepted!',
         body: `Your request for "${request.listing.book.title}" was accepted — schedule a pickup.`,
         entityType: 'exchange',
-        entityId: request.id,
+        entityId: exchange.id,
       });
 
       return { request: updatedRequest, exchange };

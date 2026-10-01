@@ -59,7 +59,7 @@ export default function CreditsPage() {
               <div
                 className="list-row"
                 key={h.id}
-                style={{ margin: '0 0 8px', width: '100%', padding: '10px 12px', gap: 10 }}
+                style={{ margin: '0 0 8px', width: '100%', padding: '10px 12px', gap: 10, alignItems: 'flex-start' }}
               >
                 <div
                   style={{
@@ -70,25 +70,37 @@ export default function CreditsPage() {
                 >
                   <Icon name={iconInfo.icon} style={{ width: 15, height: 15 }} />
                 </div>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <b style={{ fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {h.desc}
-                  </b>
-                  <StatusPill tone={toneForStatus(h.status)} style={{ marginTop: 0, flexShrink: 0 }}>
-                    {h.status}
-                  </StatusPill>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    {/* No nowrap/ellipsis here — a longer description (book title +
+                        owner name) was being silently cut off with no way to read
+                        the rest, which is worse on narrow mobile widths where less
+                        of it fit before truncating. Wrapping keeps it fully readable. */}
+                    <b style={{ fontSize: 12.5, lineHeight: 1.35, flex: 1, minWidth: 0 }}>{h.desc}</b>
+                    <b
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: 15,
+                        flexShrink: 0,
+                        color: h.amount > 0 ? 'var(--brand-2)' : 'var(--sindoor)',
+                      }}
+                    >
+                      {/* A reservation only holds a credit, it doesn't spend it —
+                          showing it with the same "-1" as a final deduction made
+                          the two look like two separate losses for one credit.
+                          Dropping the sign here (color still shows it moved out
+                          of the available balance) leaves the minus for the
+                          actual, permanent deduction. */}
+                      {h.type === 'REQUEST_RESERVED' ? Math.abs(h.amount) : (h.amount > 0 ? `+${h.amount}` : h.amount)}
+                    </b>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
+                    <StatusPill tone={toneForStatus(h.status)} style={{ marginTop: 0, flexShrink: 0 }}>
+                      {h.status}
+                    </StatusPill>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{timeAgo(h.time)}</span>
+                  </div>
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{timeAgo(h.time)}</span>
-                <b
-                  style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 15,
-                    flexShrink: 0,
-                    color: h.amount > 0 ? 'var(--brand-2)' : 'var(--sindoor)',
-                  }}
-                >
-                  {h.amount > 0 ? `+${h.amount}` : h.amount}
-                </b>
               </div>
             );
           }) : (

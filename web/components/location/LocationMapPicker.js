@@ -61,6 +61,12 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
   // still collapsed) gets stashed here and applied once it's ready,
   // instead of moveTo() silently no-op'ing on a null map.
   const pendingMoveRef = useRef(null);
+  // Every setCenter (ours or the visitor dragging) fires `idle`, but
+  // `moveTo` already does its own reverseGeocode call with the right opts —
+  // without this, the idle listener's own reverseGeocode (always
+  // updateAddress: true) would run right after and undo an
+  // `updateAddress: false` move, overwriting the field anyway.
+  const skipNextIdleRef = useRef(false);
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState('idle'); // 'idle' | 'loading' | 'ready' | 'error'
   const [locating, setLocating] = useState(false);
@@ -104,17 +110,20 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
       let firstIdleSkipped = false;
       map.addListener('idle', () => {
         if (!firstIdleSkipped) { firstIdleSkipped = true; return; }
+        if (skipNextIdleRef.current) { skipNextIdleRef.current = false; return; }
         const c = map.getCenter();
         reverseGeocode(c.lat(), c.lng());
       });
       if (pendingMoveRef.current) {
         // A search was already typed out while the map was still loading —
         // go straight there instead of settling on the map's own default
-        // first-paint position. This re-centering fires `idle` again
-        // (the second firing, past the skip above), which is exactly the
-        // one that should reverse-geocode this new position.
-        const { la, ln } = pendingMoveRef.current;
+        // first-paint position, and reverse-geocode it explicitly (with
+        // whatever opts that search wanted) rather than leaving it to the
+        // idle listener above, which always writes the address back.
+        const { la, ln, opts } = pendingMoveRef.current;
+        if (opts?.updateAddress === false) skipNextIdleRef.current = true;
         map.setCenter({ lat: la, lng: ln });
+        reverseGeocode(la, ln, opts);
         pendingMoveRef.current = null;
       }
       setStatus('ready');
@@ -123,8 +132,23 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded]);
 
-  const reverseGeocode = async (la, ln) => {
+  // `updateAddress: false` moves the pin without touching the text field —
+  // used only when the pin's new position came FROM the visitor's own typed
+  // text (see onAddressInput below). Confirmed live: reverse-geocoding that
+  // position and writing Google's formatted-address guess back into the
+  // field overwrote whatever the visitor was still in the middle of typing
+  // (a pause mid-sentence was enough to trigger it, not just finishing) —
+  // it doesn't just move the pin anymore, it also replaces their own typed
+  // address with a different, approximate one. A manual map drag or "use my
+  // current location" has no typed text to preserve, so those still want
+  // the reverse-geocoded address written into the field — only the
+  // typed-text path needs to leave it alone.
+  const reverseGeocode = async (la, ln, { updateAddress = true } = {}) => {
     const myId = ++requestIdRef.current;
+    // Only need the lat/lng written back here — skip the lookup entirely,
+    // no point spending an API call on a formatted address we're not going
+    // to use anyway.
+    if (!updateAddress) { onChangeRef.current({ lat: la, lng: ln, address: addressRef.current || '' }); return; }
     if (!GOOGLE_GEOCODING_API_KEY) { onChangeRef.current({ lat: la, lng: ln, address: addressRef.current || '' }); return; }
     const formatted = await reverseGeocodeRest(GOOGLE_GEOCODING_API_KEY, la, ln).catch(() => '');
     if (myId !== requestIdRef.current) return; // a newer move started before this one resolved — drop it
@@ -136,19 +160,24 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
   // map and waiting for `idle` to notice, which doesn't reliably follow an
   // animated move. The map still visually re-centers, just as a plain,
   // immediate jump (setCenter) instead of panTo's animation.
-  const moveTo = (la, ln) => {
+  const moveTo = (la, ln, opts) => {
     if (mapRef.current) {
+      // setCenter below also fires `idle` — skip that one echo, since this
+      // call is already about to reverse-geocode (or not) with the right opts.
+      if (opts?.updateAddress === false) skipNextIdleRef.current = true;
       mapRef.current.setCenter({ lat: la, lng: ln });
     } else {
-      pendingMoveRef.current = { la, ln };
+      pendingMoveRef.current = { la, ln, opts };
     }
-    reverseGeocode(la, ln);
+    reverseGeocode(la, ln, opts);
   };
 
   // Typing moves the pin too (debounced), not just panning the map — the
   // field's own text is updated immediately on every keystroke regardless,
   // it's only the "go geocode this and move the pin" side that waits for a
-  // pause, so the pin isn't chasing every half-typed word.
+  // pause, so the pin isn't chasing every half-typed word. That pin move
+  // must not feed back into the text field though — see reverseGeocode's
+  // `updateAddress` above.
   const onAddressInput = (text) => {
     setExpanded(true);
     requestIdRef.current += 1; // invalidate any reverse-geocode already in flight from the old position
@@ -157,7 +186,7 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
     if (!text.trim() || !GOOGLE_GEOCODING_API_KEY) return;
     searchTimerRef.current = setTimeout(async () => {
       const loc = await geocodeAddress(GOOGLE_GEOCODING_API_KEY, text.trim()).catch(() => null);
-      if (loc) moveTo(loc.lat, loc.lng);
+      if (loc) moveTo(loc.lat, loc.lng, { updateAddress: false });
     }, SEARCH_DEBOUNCE_MS);
   };
 

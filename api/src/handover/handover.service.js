@@ -102,7 +102,7 @@ export class HandoverService {
         title: 'Handover verified!',
         body: `"${exchange.listing.book.title}" is on its way to ${exchange.receiver.name}. You can rate the exchange now.`,
         entityType: 'exchange',
-        entityId: exchange.requestId,
+        entityId: exchangeId,
       });
       await this.notifications.create(tx, {
         userId: exchange.receiverId,
@@ -110,7 +110,7 @@ export class HandoverService {
         title: 'Handover verified!',
         body: `You've received "${exchange.listing.book.title}" from ${exchange.owner.name}. You can rate the exchange now.`,
         entityType: 'exchange',
-        entityId: exchange.requestId,
+        entityId: exchangeId,
       });
 
       return { success: true };

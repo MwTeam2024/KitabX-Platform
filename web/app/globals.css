@@ -190,7 +190,7 @@ a{color:inherit;text-decoration:none}
 .fab:active{transform:scale(.9)}
 
 /* bottom nav */
-.bottomnav{flex-shrink:0;height:74px;background:var(--surface);border-radius:22px 22px 0 0;box-shadow:0 -6px 20px rgba(18,61,37,.08);display:flex;position:sticky;bottom:0;z-index:20;padding-bottom:10px}
+.bottomnav{flex-shrink:0;height:74px;background:var(--surface);border-radius:22px 22px 0 0;box-shadow:0 -6px 20px rgba(18,61,37,.08);display:flex;position:sticky;bottom:0;z-index:20;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:none;border:none;font-size:9.5px;font-weight:600;color:var(--text-faint);transition:transform .13s cubic-bezier(.34,1.56,.64,1)}
 .nav-btn:active{transform:scale(.94)}
 .nav-btn .nico{width:30px;height:30px;display:flex;align-items:center;justify-content:center;
