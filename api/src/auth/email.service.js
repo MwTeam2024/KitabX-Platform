@@ -64,6 +64,12 @@ export class EmailService {
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         this.logger.error(`Brevo send failed: ${res.status} ${body}`);
+      } else {
+        // TEMPORARY — the success path logged nothing at all before this,
+        // so there was no way to tell "Brevo accepted it" apart from "this
+        // never even ran" just from Render's logs. Remove once email
+        // delivery is confirmed working end-to-end.
+        this.logger.log(`Brevo accepted email to ${to} (messageId: ${(await res.json().catch(() => ({})))?.messageId})`);
       }
     } catch (err) {
       this.logger.error(`Brevo send failed: ${err.message}`);
