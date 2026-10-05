@@ -66,7 +66,7 @@ a{color:inherit;text-decoration:none}
    there. The outer letterbox now matches the frame's own cream instead of
    a different grey/dotted background, so the wider frame doesn't create a
    visible colour seam on desktop/tablet. */
-.app-frame{max-width:800px;margin:0 auto;min-height:100dvh;background:var(--cream);color:var(--text);position:relative;display:flex;flex-direction:column;box-shadow:0 0 60px rgba(0,0,0,.08)}
+.app-frame{max-width:800px;margin:0 auto;min-height:100vh;background:var(--cream);color:var(--text);position:relative;display:flex;flex-direction:column;box-shadow:0 0 60px rgba(0,0,0,.08)}
 .app-scroll{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
 .pad-nav{padding-bottom:24px}
 
