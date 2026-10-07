@@ -12,6 +12,8 @@ import { softDeleteUser } from '../users/user-deletion.tx';
 const DEFAULT_SETTINGS = {
   supportEmail: 'support@kitabx.app',
   supportPhone: '',
+  // Discover's Books/Members/Societies/Wishlist tiles — hidden until an admin turns them on.
+  showDiscoveryStats: 'false',
 };
 
 /** §21 — the MVP admin console's non-auth, non-society operations. */

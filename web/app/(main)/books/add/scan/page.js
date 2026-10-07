@@ -124,7 +124,8 @@ export default function ScanIsbnPage() {
     patchDraft({
       title: match.title,
       author: match.author,
-      genre: match.genre || 'Fiction',
+      genre: match.genre || 'Others',
+      lang: match.language || 'Others',
       isbn: match.isbn13 || match.isbn10 || '',
       year: match.publicationYear ? String(match.publicationYear) : '',
       // Google Books' own cover — real photos of the actual copy can still

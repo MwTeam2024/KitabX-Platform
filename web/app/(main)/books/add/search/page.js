@@ -37,6 +37,8 @@ export default function SearchBookPage() {
     patchDraft({
       title: book.title,
       author: book.author,
+      genre: book.genre || 'Others',
+      lang: book.language || 'Others',
       isbn: book.isbn13 || book.isbn10 || '',
       year: book.publicationYear ? String(book.publicationYear) : '',
       photos: book.coverImageUrl ? [book.coverImageUrl] : [],

@@ -11,6 +11,7 @@ import { toBookListingLocation, toPublicUser } from '../common/serializers/user.
 import { grantAvailableCredit, reverseAvailableCredit } from '../credits/credits.tx';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CloudinaryService } from '../uploads/cloudinary.service';
+import { languageName } from '../common/languages';
 
 const MAX_PHOTOS = 3; // "Sirf per book 3 images upload krne ka option" — enforced here, not just in the UI.
 
@@ -348,7 +349,7 @@ export class ListingsService {
       subtitle: listing.book.subtitle,
       author: listing.book.author,
       genre: listing.book.genre,
-      lang: listing.book.languageCode,
+      lang: languageName(listing.book.languageCode) || listing.book.languageCode,
       isbn: listing.book.isbn13 || listing.book.isbn10,
       year: listing.book.publicationYear,
       edition: listing.book.edition,

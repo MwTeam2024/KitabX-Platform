@@ -9,11 +9,15 @@ import HeaderActions from '@/components/layout/HeaderActions';
 import BottomNav from '@/components/layout/BottomNav';
 import RadiusStepper from '@/components/discovery/RadiusStepper';
 import StatTiles from '@/components/discovery/StatTiles';
-import GenreChips from '@/components/discovery/GenreChips';
+import FilterChips from '@/components/discovery/FilterChips';
+import FacetSheet from '@/components/discovery/FacetSheet';
+import SortSheet from '@/components/discovery/SortSheet';
 import FilterSheet from '@/components/discovery/FilterSheet';
 import BookGrid from '@/components/books/BookGrid';
 import { SectionTitle } from '@/components/ui/NoteBox';
 import { useBooks } from '@/hooks/useBooks';
+import { useFacets } from '@/hooks/useFacets';
+import { CONDITIONS } from '@/lib/mockData';
 import { useLocation } from '@/hooks/useLocation';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useAppSheets } from '@/hooks/useAppSheets';
@@ -22,6 +26,13 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { discoveryService } from '@/services/discovery.service';
 
 const FILTERS_KEY = 'kitabx.discoveryFilters';
+
+// Saved from before these took several values at once: a single string
+// ("Fiction", or "All" for none) becomes a one-item list.
+const asList = (v) => (Array.isArray(v) ? v : v && v !== 'All' ? [v] : []);
+
+const FACET_TITLES = { genre: 'Genre', language: 'Language', condition: 'Condition' };
+const CONDITION_LABELS = CONDITIONS.map((c) => c.label);
 
 function loadSavedFilters() {
   try {
@@ -48,9 +59,10 @@ export default function HomePage() {
   // Filters/sort are restored from the last visit so a refresh keeps them
   // (the search text itself is deliberately not saved).
   const [saved] = useState(loadSavedFilters);
-  const [genre, setGenre] = useState(saved.genre ?? 'All');
-  const [language, setLanguage] = useState(saved.language ?? null);
-  const [condition, setCondition] = useState(saved.condition ?? null);
+  const [genre, setGenre] = useState(() => asList(saved.genre));
+  const [language, setLanguage] = useState(() => asList(saved.language));
+  const [condition, setCondition] = useState(() => asList(saved.condition));
+  const facets = useFacets();
   const [sort, setSort] = useState(saved.sort ?? 'newest');
   const debouncedQuery = useDebounce(query, 300);
 
@@ -71,12 +83,32 @@ export default function HomePage() {
     discoveryService.stats().then(setStats).catch(() => {});
   }, []);
 
-  const { books } = useBooks({ keys: discoveryKeys, genre, sort });
-  // How many distinct filter facets are active — surfaced as a number on the
-  // filter icon so it's clear at a glance without opening the sheet. A
-  // non-default sort counts too: it used to be its own visible chip, and now
-  // lives inside the sheet, so this is the only hint that it's been changed.
-  const filterCount = [genre !== 'All', !!language, !!condition, sort !== 'newest'].filter(Boolean).length;
+  const { books } = useBooks({ keys: discoveryKeys, sort });
+  const setters = { genre: setGenre, language: setLanguage, condition: setCondition };
+  const selected = { genre, language, condition };
+  const optionsFor = { genre: facets.genres, language: facets.languages, condition: CONDITION_LABELS };
+
+  const openFacet = (key) => {
+    openSheet(FACET_TITLES[key], (
+      <FacetSheet
+        options={optionsFor[key]}
+        selected={selected[key]}
+        onApply={setters[key]}
+        onClose={closeSheet}
+      />
+    ));
+  };
+
+  const clearAll = () => { setGenre([]); setLanguage([]); setCondition([]); };
+
+  const openSort = () => {
+    openSheet('Sort by', (
+      <SortSheet
+        value={sort}
+        onSelect={(key) => { setSort(key); closeSheet(); }}
+      />
+    ));
+  };
 
   const openFilters = () => {
     openSheet('Search & Filters', (
@@ -86,7 +118,7 @@ export default function HomePage() {
         condition={condition}
         sort={sort}
         onApply={(next) => {
-          setGenre(next.genre || 'All');
+          setGenre(next.genre);
           setLanguage(next.language);
           setCondition(next.condition);
           setSort(next.sort || 'newest');
@@ -122,24 +154,29 @@ export default function HomePage() {
       <div className="app-scroll">
         <RadiusStepper />
 
-        <StatTiles
-          tiles={[
-            { icon: 'bookOpen', value: stats?.totalBooks ?? 0, label: 'Books listed' },
-            { icon: 'users', value: stats?.totalMembers ?? 0, label: 'Members' },
-            { icon: 'building', value: stats?.totalSocieties ?? 0, label: 'Societies' },
-            { icon: 'heart', value: wishlist.length, label: 'My wishlist' },
-          ]}
-        />
+        {/* Admin Settings → "Show Discover stats". Off until stats says otherwise,
+            so nothing flashes in while it loads. */}
+        {stats?.show && (
+          <StatTiles
+            tiles={[
+              { icon: 'bookOpen', value: stats?.totalBooks ?? 0, label: 'Books listed' },
+              { icon: 'users', value: stats?.totalMembers ?? 0, label: 'Members' },
+              { icon: 'building', value: stats?.totalSocieties ?? 0, label: 'Societies' },
+              { icon: 'heart', value: wishlist.length, label: 'My wishlist' },
+            ]}
+          />
+        )}
 
         <div className="section-row">
           <SectionTitle>Available near you</SectionTitle>
         </div>
 
-        <GenreChips
-          genre={genre}
-          onGenre={setGenre}
-          onFilters={openFilters}
-          filterCount={filterCount}
+        <FilterChips
+          selected={selected}
+          sortActive={sort !== 'newest'}
+          onClearAll={clearAll}
+          onOpenFacet={openFacet}
+          onOpenSort={openSort}
         />
 
         <BookGrid
@@ -150,7 +187,7 @@ export default function HomePage() {
       </div>
 
       <button className="fab" onClick={() => router.push('/books/add')}>
-        Add your book
+        List Book
       </button>
       <BottomNav />
     </>

@@ -1,12 +1,19 @@
 import { Dependencies, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../common/redis/redis.service';
+import { languageName } from '../common/languages';
 
 const CACHE_TTL_SECONDS = 60 * 60 * 24; // §7: cache ISBN lookups in Redis.
 
 // Open Library's default search response omits isbn (and some of the other
 // fields we need) unless explicitly asked for.
 const OPEN_LIBRARY_SEARCH_FIELDS = 'title,subtitle,author_name,cover_i,first_publish_year,isbn,publisher,subject,language,number_of_pages_median';
+
+// Open Library "subjects" double as its genres, but the first one is often a
+// catalogue note ("Translations into Indonesian") rather than a genre — skip those.
+function openLibraryGenre(subjects) {
+  return (subjects || []).find((s) => s && !/^translations?\s+(into|from)/i.test(s)) || null;
+}
 
 /**
  * Google Books lookups happen server-side (§7, §18) so the API key — when one
@@ -31,7 +38,11 @@ export class GoogleBooksService {
   async lookupByIsbn(isbn) {
     const cacheKey = `googlebooks:isbn:${isbn}`;
     const cached = await this.redis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      // Entries cached before `language` existed only have the raw code.
+      const hit = JSON.parse(cached);
+      return { ...hit, language: hit.language ?? languageName(hit.languageCode) };
+    }
 
     // Try Google Books first; only reach for Open Library — a second, free,
     // no-key-needed catalog — when Google Books has nothing (or is itself
@@ -58,13 +69,27 @@ export class GoogleBooksService {
   async _lookupOpenLibraryIsbn(isbn) {
     try {
       const url = `https://openlibrary.org/api/books.json?bibkeys=ISBN:${encodeURIComponent(isbn)}&jscmd=data&format=json`;
-      const res = await fetch(url);
+      // The `data` view above leaves out language; the edition record has it
+      // (when Open Library has one). Fetched alongside, so it costs no extra wait.
+      const [res, languageCode] = await Promise.all([fetch(url), this._openLibraryEditionLanguage(isbn)]);
       if (!res.ok) return null;
       const data = await res.json();
       const entry = data?.[`ISBN:${isbn}`];
-      return entry ? this._normalizeOpenLibrary(entry, isbn) : null;
+      return entry ? this._normalizeOpenLibrary(entry, isbn, languageCode) : null;
     } catch (err) {
       this.logger.warn(`Open Library ISBN lookup failed: ${err.message}`);
+      return null;
+    }
+  }
+
+  /** "/languages/eng" -> "eng", or null when the edition has no language. */
+  async _openLibraryEditionLanguage(isbn) {
+    try {
+      const res = await fetch(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`, { redirect: 'follow' });
+      if (!res.ok) return null;
+      const edition = await res.json();
+      return edition?.languages?.[0]?.key?.split('/').pop() || null;
+    } catch {
       return null;
     }
   }
@@ -184,13 +209,14 @@ export class GoogleBooksService {
       pageCount: info.pageCount || null,
       coverImageUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://') || null,
       languageCode: info.language || null,
+      language: languageName(info.language),
       genre: info.categories?.[0] || null,
       isbn13: isbn13 || (fallbackIsbn?.length === 13 ? fallbackIsbn : null),
       isbn10: isbn10 || (fallbackIsbn?.length === 10 ? fallbackIsbn : null),
     };
   }
 
-  _normalizeOpenLibrary(entry, fallbackIsbn) {
+  _normalizeOpenLibrary(entry, fallbackIsbn, languageCode = null) {
     const isbn13 = entry.identifiers?.isbn_13?.[0] || null;
     const isbn10 = entry.identifiers?.isbn_10?.[0] || null;
     const publishYear = entry.publish_date ? parseInt(String(entry.publish_date).slice(-4), 10) : null;
@@ -205,8 +231,9 @@ export class GoogleBooksService {
       publicationYear: Number.isNaN(publishYear) ? null : publishYear,
       pageCount: entry.number_of_pages || null,
       coverImageUrl: entry.cover?.large || entry.cover?.medium || entry.cover?.small || null,
-      languageCode: null,
-      genre: entry.subjects?.[0]?.name || null,
+      languageCode,
+      language: languageName(languageCode),
+      genre: openLibraryGenre((entry.subjects || []).map((s) => s.name)),
       isbn13: isbn13 || (fallbackIsbn?.length === 13 ? fallbackIsbn : null),
       isbn10: isbn10 || (fallbackIsbn?.length === 10 ? fallbackIsbn : null),
     };
@@ -225,7 +252,8 @@ export class GoogleBooksService {
       pageCount: doc.number_of_pages_median || null,
       coverImageUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null,
       languageCode: doc.language?.[0] || null,
-      genre: doc.subject?.[0] || null,
+      language: languageName(doc.language?.[0]),
+      genre: openLibraryGenre(doc.subject),
       isbn13: isbns.find((i) => i.length === 13) || null,
       isbn10: isbns.find((i) => i.length === 10) || null,
     };

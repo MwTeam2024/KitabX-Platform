@@ -422,11 +422,11 @@ export function AppDataProvider({ children }) {
 
   const loadAdminSettings = useCallback(async () => {
     const s = await adminService.getSettings();
-    setAdminSettings({ supportEmail: s.supportEmail, supportPhone: s.supportPhone });
+    setAdminSettings({ supportEmail: s.supportEmail, supportPhone: s.supportPhone, showDiscoveryStats: s.showDiscoveryStats });
   }, []);
   const saveAdminSettings = useCallback(async (updates) => {
     const s = await adminService.updateSettings(updates);
-    setAdminSettings({ supportEmail: s.supportEmail, supportPhone: s.supportPhone });
+    setAdminSettings({ supportEmail: s.supportEmail, supportPhone: s.supportPhone, showDiscoveryStats: s.showDiscoveryStats });
   }, []);
 
   // Session is hydrated by SessionGate before this provider's children ever

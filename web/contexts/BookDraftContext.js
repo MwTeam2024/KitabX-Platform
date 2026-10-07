@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { CONDITIONS, GENRES, LANGUAGES, NEW_BOOK_COVERS, NEW_BOOK_EMBLEMS } from '@/lib/mockData';
+import { CONDITIONS, NEW_BOOK_COVERS, NEW_BOOK_EMBLEMS } from '@/lib/mockData';
 
 const BookDraftContext = createContext(null);
 
@@ -9,8 +9,8 @@ const EMPTY_DRAFT = {
   editKey: null,
   title: '',
   author: '',
-  genre: GENRES[0],
-  lang: LANGUAGES[0],
+  genre: '',
+  lang: 'English',
   isbn: '',
   year: '',
   cond: CONDITIONS[1].label,
@@ -34,8 +34,8 @@ export function BookDraftProvider({ children }) {
       editKey: book.key,
       title: book.title,
       author: book.author,
-      genre: book.genre || GENRES[0],
-      lang: book.lang || LANGUAGES[0],
+      genre: book.genre || 'Others',
+      lang: book.lang || 'Others',
       isbn: book.isbn || '',
       year: book.year || '',
       cond: book.cond || CONDITIONS[1].label,

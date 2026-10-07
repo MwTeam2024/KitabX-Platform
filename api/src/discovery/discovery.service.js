@@ -2,9 +2,17 @@ import { Dependencies, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { toBookListingLocation } from '../common/serializers/user.serializer';
+import { DEFAULT_LANGUAGES, OTHERS, languageName } from '../common/languages';
 
 const STATS_CACHE_KEY = 'discovery:stats';
 const STATS_CACHE_TTL_SECONDS = 30;
+// Admin Settings toggle (AppSetting row, 'true'/'false') for the Discover stat tiles.
+const SHOW_STATS_SETTING_KEY = 'showDiscoveryStats';
+const NEVER_MATCHES = '00000000-0000-0000-0000-000000000000';
+const POPULAR_COUNT = 6;
+
+/** "Non-fiction", "Nonfiction", "non fiction" and "NON-FICTION" are one genre. */
+const genreKey = (g) => String(g ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /**
  * §9: same-society first, then nearby societies within a selectable radius,
@@ -22,7 +30,7 @@ export class DiscoveryService {
     this.redis = redis;
   }
 
-  async discover(viewer, { radiusKm = 0.5, genre, language, condition, q, sort = 'newest' } = {}) {
+  async discover(viewer, { radiusKm = 0.5, genre = [], language = [], condition = [], q, sort = 'newest' } = {}) {
     if (!viewer.societyId) {
       return { listings: [], note: 'Join a society to see books nearby.' };
     }
@@ -47,29 +55,29 @@ export class DiscoveryService {
     const distanceBySociety = new Map(nearbySocieties.map((s) => [s.societyId, s.distanceMeters]));
     const receivedBookIds = [...new Set(received.map((e) => e.listing.bookId))];
 
-    // `genre` and `language` both narrow the related `book` row — merged into
-    // one filter object rather than two separate `book: {...}` spreads,
-    // which would silently clobber each other (object spread replaces the
-    // whole `book` key, it doesn't merge nested objects) the moment both are
-    // supplied at once, e.g. from the Search & Filters sheet (Task 67).
-    const bookFilter = {
-      ...(genre && genre !== 'All' ? { genre } : {}),
-      // Case-insensitive: real listings have both "English" and "en" as
-      // `languageCode`, and this at least tolerates a casing mismatch
-      // between however a value got stored and however it's searched for.
-      ...(language ? { languageCode: { equals: language, mode: 'insensitive' } } : {}),
-    };
+    // Each of genre/language/condition takes several values (any of them
+    // matches; the three groups are ANDed together). They go into one
+    // `AND` list — `q` below already owns the `OR` key, and `genre`/`language`
+    // both narrow the related `book` row, so spreading them as separate
+    // `book: {...}` keys would clobber each other.
+    const bookAnd = [];
+    const genreOr = await this._genreMatches(genre);
+    if (genreOr.length) bookAnd.push({ OR: genreOr });
+    const languageOr = await this._languageMatches(language);
+    if (languageOr.length) bookAnd.push({ OR: languageOr });
+
+    // `condition` lives on the listing itself, not the book. Case-
+    // insensitive because real data has both "Good" and "GOOD" — an exact
+    // match would silently miss whichever casing the filter isn't.
+    const conditionOr = condition.map((c) => ({ condition: { equals: c, mode: 'insensitive' } }));
 
     const where = {
       status: 'ACTIVE',
       societyId: { in: [...distanceBySociety.keys()] },
       ownerId: { not: viewer.id },
       ...(receivedBookIds.length ? { bookId: { notIn: receivedBookIds } } : {}),
-      ...(Object.keys(bookFilter).length ? { book: bookFilter } : {}),
-      // `condition` lives on the listing itself, not the book. Case-
-      // insensitive because real data has both "Good" and "GOOD" — an exact
-      // match would silently miss whichever casing the filter chip isn't.
-      ...(condition ? { condition: { equals: condition, mode: 'insensitive' } } : {}),
+      ...(bookAnd.length ? { book: { AND: bookAnd } } : {}),
+      ...(conditionOr.length ? { AND: [{ OR: conditionOr }] } : {}),
       ...(q?.trim()
         ? {
             OR: [
@@ -106,6 +114,87 @@ export class DiscoveryService {
     };
   }
 
+  /** Genres come straight from Google Books / Open Library, so the same one
+   * turns up as "Fiction", "fiction" or "Non-fiction"/"Nonfiction" — a chosen
+   * genre matches every stored spelling of it. "Others" is also every book
+   * that has no genre at all. */
+  async _genreMatches(genres) {
+    if (!genres.length) return [];
+    const wanted = new Set(genres.map(genreKey));
+    const rows = await this.prisma.book.groupBy({ by: ['genre'], where: { genre: { not: null } } });
+    const out = rows
+      .map((r) => r.genre)
+      .filter((raw) => raw.trim() && wanted.has(genreKey(raw)))
+      .map((raw) => ({ genre: { equals: raw, mode: 'insensitive' } }));
+    if (wanted.has(genreKey(OTHERS))) out.push({ genre: null }, { genre: '' });
+    // A genre nobody has stored matches nothing (an empty list would read as "no filter").
+    return out.length ? out : [{ id: NEVER_MATCHES }];
+  }
+
+  /** `languageCode` holds "en", "eng" or "English" depending on where the
+   * book came from, so a language name is expanded to every stored spelling
+   * that resolves to it. */
+  async _languageMatches(languages) {
+    if (!languages.length) return [];
+    const wanted = new Set(languages.map((l) => (languageName(l) || l).toLowerCase()));
+    const rows = await this.prisma.book.groupBy({ by: ['languageCode'], where: { languageCode: { not: null } } });
+    const spellings = rows
+      .map((r) => r.languageCode)
+      .filter((raw) => raw.trim() && wanted.has((languageName(raw) || '').toLowerCase()));
+    const out = spellings.map((raw) => ({ languageCode: { equals: raw, mode: 'insensitive' } }));
+    if (wanted.has(OTHERS.toLowerCase())) {
+      out.push({ languageCode: null }, { languageCode: '' }, { languageCode: { equals: OTHERS, mode: 'insensitive' } });
+    }
+    // A language nobody has stored yet (Hindi on day one) must match nothing —
+    // an empty list here would read as "no language filter" and show everything.
+    return out.length ? out : [{ id: NEVER_MATCHES }];
+  }
+
+  /** Every genre and language that exists on any book — drives the Discover
+   * filters and the add-book dropdowns, so a new one from a scan shows up
+   * everywhere on its own. Duplicates that differ only by case/spelling are
+   * merged, and "Others" is always last. */
+  async facets() {
+    const [genreRows, languageRows] = await Promise.all([
+      this.prisma.book.groupBy({ by: ['genre'], where: { genre: { not: null } }, _count: { _all: true } }),
+      this.prisma.book.groupBy({ by: ['languageCode'], where: { languageCode: { not: null } }, _count: { _all: true } }),
+    ]);
+
+    // One entry per genre (ignoring case, hyphens, spacing), shown the way most books spell it.
+    const byKey = new Map();
+    for (const row of genreRows) {
+      const label = row.genre.trim();
+      const key = genreKey(label);
+      if (!key || key === genreKey(OTHERS)) continue;
+      const entry = byKey.get(key) || { total: 0, best: label, bestCount: 0 };
+      entry.total += row._count._all;
+      if (row._count._all > entry.bestCount) { entry.best = label; entry.bestCount = row._count._all; }
+      byKey.set(key, entry);
+    }
+    const entries = [...byKey.values()];
+    const genres = entries.map((e) => e.best).sort((a, b) => a.localeCompare(b));
+    // The handful with the most books — what the filter sheet shows as chips before "View all".
+    const popularGenres = [...entries].sort((a, b) => b.total - a.total || a.best.localeCompare(b.best)).slice(0, POPULAR_COUNT).map((e) => e.best);
+
+    const langCounts = new Map();
+    for (const r of languageRows) {
+      const name = languageName(r.languageCode);
+      if (name && name !== OTHERS) langCounts.set(name, (langCounts.get(name) || 0) + r._count._all);
+    }
+    const extra = [...langCounts.keys()].filter((n) => !DEFAULT_LANGUAGES.includes(n)).sort((a, b) => a.localeCompare(b));
+    const languages = [...DEFAULT_LANGUAGES, ...extra];
+    const popularLanguages = [...languages]
+      .sort((a, b) => (langCounts.get(b) || 0) - (langCounts.get(a) || 0) || languages.indexOf(a) - languages.indexOf(b))
+      .slice(0, POPULAR_COUNT);
+
+    return {
+      genres: [...genres, OTHERS],
+      languages: [...languages, OTHERS],
+      popularGenres,
+      popularLanguages,
+    };
+  }
+
   /**
    * Returns [{ societyId, distanceMeters }] for every active society within
    * `radiusKm` of the viewer's own society, using PostGIS ST_DWithin against
@@ -136,8 +225,14 @@ export class DiscoveryService {
    * staleness on a "total books/members/societies" counter is unnoticeable,
    * so cache it rather than running 3 COUNTs on every load. */
   async stats() {
+    // Read fresh every time (not cached with the counts below) so an admin
+    // flipping the toggle takes effect on the next load. Off by default —
+    // totals this small on a young platform read as empty, not impressive.
+    const flag = await this.prisma.appSetting.findUnique({ where: { key: SHOW_STATS_SETTING_KEY } });
+    if (flag?.value !== 'true') return { show: false };
+
     const cached = await this.redis.get(STATS_CACHE_KEY);
-    if (cached) return JSON.parse(cached);
+    if (cached) return { show: true, ...JSON.parse(cached) };
 
     const [totalBooks, totalMembers, totalSocieties] = await Promise.all([
       this.prisma.bookListing.count({ where: { status: 'ACTIVE' } }),
@@ -146,7 +241,7 @@ export class DiscoveryService {
     ]);
     const result = { totalBooks, totalMembers, totalSocieties };
     await this.redis.set(STATS_CACHE_KEY, JSON.stringify(result), STATS_CACHE_TTL_SECONDS);
-    return result;
+    return { show: true, ...result };
   }
 
   _toCardDto(listing, distanceKm) {
@@ -155,9 +250,9 @@ export class DiscoveryService {
       bookId: listing.bookId,
       title: listing.book.title,
       author: listing.book.author,
-      genre: listing.book.genre,
+      genre: listing.book.genre || OTHERS,
       cond: listing.condition,
-      tags: [listing.condition, listing.book.genre].filter(Boolean),
+      tags: [listing.condition, listing.book.genre || OTHERS].filter(Boolean),
       distanceKm,
       owner: initialsOf(listing.owner.name),
       ownerId: listing.owner.id,

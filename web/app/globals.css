@@ -79,7 +79,7 @@ a{color:inherit;text-decoration:none}
 .credit-num{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;font-size:11px}
 .circle-btn{width:34px;height:34px;border-radius:50%;background:rgb(255 255 255);border:none;color:#fff;display:flex;align-items:center;justify-content:center;position:relative;flex-shrink:0}
 .circle-btn .ic{width:17px;height:17px;color:black}
-.circle-btn .hdr-count,.chip.circ .hdr-count{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;
+.circle-btn .hdr-count{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;
   background:var(--sindoor);color:#fff;font-size:9.5px;font-weight:700;line-height:16px;text-align:center;
   box-shadow:0 0 0 2px var(--cream)}
 .avatar-chip{width:34px;height:34px;border-radius:50%;background:#fff;color:var(--brand);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;font-size:12.5px;flex-shrink:0;border:none}
@@ -126,12 +126,9 @@ a{color:inherit;text-decoration:none}
 .chiprow{display:flex;gap:8px;padding:12px 16px 4px;overflow-x:auto;overflow-y:hidden;
   -webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;
   -webkit-mask-image:linear-gradient(90deg,#000 92%,transparent);mask-image:linear-gradient(90deg,#000 92%,transparent)}
+.chip-wrap{display:flex;flex-wrap:wrap;gap:8px}
 .chip{flex-shrink:0;padding:8px 15px;border-radius:999px;font-size:12.5px;font-weight:600;border:1.4px solid var(--line);color:var(--text);background:var(--surface)}
 .chip.on{background:var(--brand);color:#fff;border-color:var(--brand)}
-.chip.circ{width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative}
-.chip.circ .ic{width:15px;height:15px;color:var(--brand)}
-.chip.circ.active{background:var(--brand);border-color:var(--brand)}
-.chip.circ.active .ic{color:#fff}
 
 /* book cover */
 .bcov{position:relative;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;padding:12% 8%;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
@@ -191,6 +188,14 @@ a{color:inherit;text-decoration:none}
 .dist{display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text-faint)}
 .dist .ic{width:10px;height:10px}
 
+/* checkbox pick-lists (Discover filters) */
+/* ten rows (11px padding x2 + 24px) then scroll */
+.check-list{max-height:min(460px,58vh);overflow-y:auto;overscroll-behavior:contain}
+.check-row{display:flex;align-items:center;gap:14px;padding:11px 2px;font-size:15px;color:var(--text);cursor:pointer}
+.check-row input{appearance:none;-webkit-appearance:none;width:22px;height:22px;border:1.5px solid #c5ccd6;border-radius:6px;background:#fff;display:grid;place-content:center;flex-shrink:0;margin:0}
+.check-row input:checked{background:var(--brand-2);border-color:var(--brand-2)}
+.check-row input:checked::after{content:'';width:6px;height:11px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+
 .fab{position:fixed;bottom:calc(90px + env(safe-area-inset-bottom));right:calc(16px + max(0px, (100vw - 800px) / 2));height:42px;padding:0 20px;border-radius:999px;background:var(--brand);border:none;color:#fff;font-size:13.5px;font-weight:700;letter-spacing:.01em;white-space:nowrap;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(18,61,37,.45);z-index:80;transition:transform .15s cubic-bezier(.34,1.56,.64,1)}
 .fab:active{transform:scale(.9)}
 
@@ -243,6 +248,16 @@ a{color:inherit;text-decoration:none}
 .field input.has-badge,.field select.has-badge{padding-left:46px}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(31,122,70,.14)}
 .field textarea{resize:none;min-height:80px;font-family:inherit}
+/* ListSelect: looks like the form's selects, but its list is capped at ten rows */
+.list-select{position:relative}
+.list-select-btn{width:100%;padding:13px 14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);font-size:16px;color:var(--text);display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left}
+.list-select-btn.empty{color:var(--text-muted)}
+.list-select-btn[aria-expanded="true"]{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(31,122,70,.14)}
+.list-select-panel{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;box-shadow:var(--shadow);max-height:min(458px,70vh);overflow-y:auto;overscroll-behavior:contain;padding:4px 0}
+.list-select-panel.wide{width:calc(200% + 10px)}
+.list-select-panel.right{left:auto;right:0}
+.list-select-opt{display:block;width:100%;text-align:left;padding:11px 14px;min-height:44px;line-height:22px;font-size:15px;color:var(--text);background:none;border:none}
+.list-select-opt.on{background:var(--mint);color:var(--brand-2);font-weight:700}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .note-box{background:var(--mint);border-radius:12px;padding:12px 14px;display:flex;gap:9px;align-items:flex-start;font-size:12px;color:var(--brand-2);line-height:1.5}
 .note-box .ic{width:15px;height:15px;flex-shrink:0;margin-top:1px}

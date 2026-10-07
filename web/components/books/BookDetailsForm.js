@@ -9,7 +9,9 @@ import { ConditionGrid } from '@/components/ui/PillSelect';
 import { useBookDraft } from '@/contexts/BookDraftContext';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/components/ui/ToastProvider';
-import { CONDITIONS, GENRES, LANGUAGES } from '@/lib/mockData';
+import ListSelect from '@/components/ui/ListSelect';
+import { useFacets } from '@/hooks/useFacets';
+import { CONDITIONS } from '@/lib/mockData';
 
 /**
  * Screen 09 — every field the source plan requires for a listing: title, author,
@@ -21,6 +23,13 @@ export default function BookDetailsForm({ editKey }) {
   const showToast = useToast();
   const { books } = useAppData();
   const { draft, patchDraft, loadForEdit } = useBookDraft();
+  const facets = useFacets();
+  // A saved/scanned value is always selectable even if it isn't in the list
+  // yet — and one that only differs by case/hyphens ("non fiction") selects
+  // the list's own spelling instead of adding a near-duplicate option.
+  const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const resolve = (options, current) => options.find((o) => norm(o) === norm(current)) ?? current;
+  const withCurrent = (options, current) => (current && !options.some((o) => norm(o) === norm(current)) ? [current, ...options] : options);
 
   useEffect(() => {
     if (editKey && books[editKey] && draft.editKey !== editKey) loadForEdit(books[editKey]);
@@ -31,6 +40,7 @@ export default function BookDetailsForm({ editKey }) {
   const toPreview = () => {
     if (!draft.title.trim()) return showToast('Please add the book title');
     if (!draft.author.trim()) return showToast('Please add the author');
+    if (!draft.genre) return showToast('Please choose a genre');
     if (!draft.photos.length) return showToast('Add at least one photo of your copy');
     router.push('/books/add/preview');
   };
@@ -70,15 +80,26 @@ export default function BookDetailsForm({ editKey }) {
         <div className="field-row">
           <div className="field">
             <label htmlFor="nb-genre">Genre</label>
-            <select id="nb-genre" value={draft.genre} onChange={(e) => patchDraft({ genre: e.target.value })}>
-              {GENRES.map((g) => <option key={g}>{g}</option>)}
-            </select>
+            <ListSelect
+              id="nb-genre"
+              value={resolve(facets.genres, draft.genre)}
+              options={withCurrent(facets.genres, draft.genre)}
+              placeholder="Select genre"
+              wide
+              onChange={(g) => patchDraft({ genre: g })}
+            />
           </div>
           <div className="field">
             <label htmlFor="nb-lang">Language</label>
-            <select id="nb-lang" value={draft.lang} onChange={(e) => patchDraft({ lang: e.target.value })}>
-              {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
-            </select>
+            <ListSelect
+              id="nb-lang"
+              value={resolve(facets.languages, draft.lang)}
+              options={withCurrent(facets.languages, draft.lang)}
+              placeholder="Select language"
+              wide
+              align="right"
+              onChange={(l) => patchDraft({ lang: l })}
+            />
           </div>
         </div>
 

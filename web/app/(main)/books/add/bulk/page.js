@@ -52,12 +52,13 @@ const MIN_SCAN_MS = 1300;
 function toDetectedItem(candidate, i) {
   const title = candidate.title || 'Untitled — tap to edit';
   const author = candidate.author || 'Unknown author';
-  const genre = candidate.genre || 'Fiction';
+  const genre = candidate.genre || 'Others';
   return {
     id: `d${i}`,
     title,
     author,
     genre,
+    lang: candidate.language || 'Others',
     isbn: candidate.isbn13 || candidate.isbn10 || candidate.isbn || '',
     year: candidate.publicationYear ? String(candidate.publicationYear) : (candidate.year || ''),
     confidence: candidate.unmatched ? 'low' : (candidate.confidence || 'low'),
@@ -195,7 +196,7 @@ export default function BulkUploadPage() {
         title: d.title,
         author: d.author,
         genre: d.genre,
-        lang: 'English',
+        lang: d.lang,
         cond: 'Good',
         isbn: d.isbn,
         year: d.year,

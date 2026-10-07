@@ -20,6 +20,7 @@ export default function AdminSettingsPage() {
       setForm({
         supportEmail: admin.settings.supportEmail,
         supportPhone: admin.settings.supportPhone,
+        showDiscoveryStats: admin.settings.showDiscoveryStats === 'true',
       });
     }
   }, [admin.settings, form]);
@@ -29,6 +30,7 @@ export default function AdminSettingsPage() {
       await saveAdminSettings({
         supportEmail: form.supportEmail.trim(),
         supportPhone: form.supportPhone.trim(),
+        showDiscoveryStats: form.showDiscoveryStats,
       });
       setSaved(true);
       showToast('Settings saved');
@@ -59,6 +61,19 @@ export default function AdminSettingsPage() {
           <label htmlFor="s-phone">Support Phone</label>
           <input id="s-phone" {...field('supportPhone')} />
         </div>
+        <label className="reason-item" style={{ marginBottom: 14 }}>
+          <input
+            type="checkbox"
+            checked={!!form.showDiscoveryStats}
+            onChange={(e) => setForm((f) => ({ ...f, showDiscoveryStats: e.target.checked }))}
+          />
+          <span>
+            Show stats on Discover
+            <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-muted)' }}>
+              The Books listed / Members / Societies / My wishlist tiles under Discovery radius.
+            </span>
+          </span>
+        </label>
         <button className="btn btn-primary" style={{ width: 'auto', padding: '10px 22px' }} onClick={save}>
           Save Settings
         </button>

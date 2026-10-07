@@ -141,5 +141,8 @@ export const CONDITIONS = [
   { label: 'Good', em: '👍' },
   { label: 'Well Read', em: '📖' },
 ];
-export const GENRES = ['Fiction', 'Non-fiction', 'School', 'College'];
-export const LANGUAGES = ['English', 'Hindi'];
+// Genres aren't a fixed list any more — they're whatever Google Books / Open
+// Library have sent (see useFacets). Languages start from these ten.
+export const LANGUAGES = [
+  'Hindi', 'English', 'Bengali', 'Marathi', 'Telugu', 'Tamil', 'Gujarati', 'Kannada', 'Malayalam', 'Punjabi',
+];
