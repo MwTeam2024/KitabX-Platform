@@ -8,7 +8,12 @@ const TYPE_EMOJI = {
 
 function toDeepLink(n) {
   if (n.entityType === 'exchange') return `/exchanges/${n.entityId}`;
-  if (n.entityType === 'book_request') return '/requests';
+  if (n.entityType === 'book_request') {
+    // Only the owner's "New request…" needs the accept/decline queue; every
+    // other request notification (declined, cancelled, expired) is about one
+    // specific request, whose detail page lives under /exchanges/<request id>.
+    return n.title?.startsWith('New request') ? '/requests' : `/exchanges/${n.entityId}`;
+  }
   if (n.entityType === 'listing') return `/books/${n.entityId}`;
   if (n.type === 'REFERRAL') return '/credits';
   return undefined;

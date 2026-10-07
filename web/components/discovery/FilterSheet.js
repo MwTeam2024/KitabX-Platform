@@ -6,9 +6,16 @@ import { GENRES, LANGUAGES, CONDITIONS } from '@/lib/mockData';
 
 const CONDITION_LABELS = CONDITIONS.map((c) => c.label);
 
+export const SORT_OPTIONS = [
+  { key: 'newest', label: 'Newest' },
+  { key: 'nearest', label: 'Nearest' },
+  { key: 'recent', label: 'Recently added' },
+];
+
 /**
- * Single-select genre/language/condition filters plus the radius stepper
- * (§8). Task 67: this used to keep its own disconnected local state and a
+ * Single-select genre/language/condition filters, the sort order and the
+ * radius stepper (§8) — everything beyond the genre chips on Discover lives
+ * here, so that row stays just genres. Task 67: this used to keep its own disconnected local state and a
  * made-up `resultCount` estimate that never reflected a real query — the
  * parent never even read the selections it emitted, so nothing here ever
  * actually filtered anything. Now controlled by the parent's real
@@ -18,12 +25,13 @@ const CONDITION_LABELS = CONDITIONS.map((c) => c.label);
  * options match real stored values (the old list included "New"/"Fair",
  * neither of which any listing has ever actually been saved as).
  */
-export default function FilterSheet({ genre, language, condition, onApply, onClose }) {
+export default function FilterSheet({ genre, language, condition, sort, onApply, onClose }) {
   const { radiusKm, adjustRadius } = useLocation();
   const [pending, setPending] = useState({
     genre: genre && genre !== 'All' ? genre : null,
     language: language || null,
     condition: condition || null,
+    sort: sort || 'newest',
   });
 
   const pick = (group, value) =>
@@ -50,6 +58,22 @@ export default function FilterSheet({ genre, language, condition, onApply, onClo
       <div className="field"><label>Language</label>{group('language', LANGUAGES)}</div>
       <div className="field"><label>Condition</label>{group('condition', CONDITION_LABELS)}</div>
 
+      <div className="field">
+        <label>Sort by</label>
+        <div className="chiprow" style={{ margin: 0 }}>
+          {SORT_OPTIONS.map((o) => (
+            <button
+              key={o.key}
+              className={`chip${pending.sort === o.key ? ' on' : ''}`}
+              onClick={() => setPending((s) => ({ ...s, sort: o.key }))}
+              aria-pressed={pending.sort === o.key}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="filt-group">
         <span className="filt-group-h">Discovery radius</span>
         <div className="stepper">
@@ -62,7 +86,7 @@ export default function FilterSheet({ genre, language, condition, onApply, onClo
       <button
         className="link-green"
         style={{ marginBottom: 12 }}
-        onClick={() => setPending({ genre: null, language: null, condition: null })}
+        onClick={() => setPending({ genre: null, language: null, condition: null, sort: 'newest' })}
       >
         Clear all
       </button>

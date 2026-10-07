@@ -164,8 +164,10 @@ export class RequestsService {
         type: 'REQUEST',
         title: 'Request accepted!',
         body: `Your request for "${request.listing.book.title}" was accepted — schedule a pickup.`,
+        // The web app keys an exchange by its request's id (that's what
+        // /exchanges/:id and getExchange() resolve), not Exchange.id.
         entityType: 'exchange',
-        entityId: exchange.id,
+        entityId: request.id,
       });
 
       return { request: updatedRequest, exchange };

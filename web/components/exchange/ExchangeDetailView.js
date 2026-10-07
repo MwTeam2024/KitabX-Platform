@@ -35,7 +35,13 @@ export default function ExchangeDetailView({ exchangeId }) {
     if (exchange) { setChecked(true); return; }
     let alive = true;
     setChecked(false);
-    ensureExchange(exchangeId).then(() => { if (alive) setChecked(true); });
+    ensureExchange(exchangeId).then((canonicalId) => {
+      if (!alive) return;
+      // Opened with an Exchange row's own id (older notification links) —
+      // hop to the id the rest of the app uses so the lookup above resolves.
+      if (canonicalId && canonicalId !== exchangeId) { router.replace(`/exchanges/${canonicalId}`); return; }
+      setChecked(true);
+    });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exchangeId, exchange]);

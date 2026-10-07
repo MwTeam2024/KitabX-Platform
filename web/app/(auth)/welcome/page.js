@@ -37,6 +37,11 @@ export default function WelcomePage() {
       <div className="welcome-mark">
         <div className="logo-badge welcome-logo" />
         <p className="welcome-tagline">Give a book, Get a book</p>
+        <p className="welcome-sub">
+          <span>Read</span><i className="welcome-dot" aria-hidden="true" />
+          <span>Exchange</span><i className="welcome-dot" aria-hidden="true" />
+          <span>Repeat</span>
+        </p>
       </div>
 
       <div className="welcome-actions">

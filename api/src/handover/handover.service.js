@@ -101,16 +101,18 @@ export class HandoverService {
         type: 'EXCHANGE',
         title: 'Handover verified!',
         body: `"${exchange.listing.book.title}" is on its way to ${exchange.receiver.name}. You can rate the exchange now.`,
+        // Request id, not Exchange.id — the web app keys exchanges by it.
         entityType: 'exchange',
-        entityId: exchangeId,
+        entityId: exchange.requestId,
       });
       await this.notifications.create(tx, {
         userId: exchange.receiverId,
         type: 'EXCHANGE',
         title: 'Handover verified!',
         body: `You've received "${exchange.listing.book.title}" from ${exchange.owner.name}. You can rate the exchange now.`,
+        // Request id, not Exchange.id — the web app keys exchanges by it.
         entityType: 'exchange',
-        entityId: exchangeId,
+        entityId: exchange.requestId,
       });
 
       return { success: true };

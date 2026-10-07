@@ -58,7 +58,7 @@ export default function MyShelfPage() {
         </div>
 
         <NoteBox icon="gift" style={{ margin: '12px 16px' }}>
-          Every book listed is a permanent gift and earns <b>1 credit</b>.
+          List a book and earn <b>1 credit</b>.
         </NoteBox>
 
         <SegTabs

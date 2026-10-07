@@ -94,7 +94,9 @@ export class NotificationsService {
       case 'exchange':
         return `/exchanges/${notification.entityId}`;
       case 'book_request':
-        return '/requests';
+        // Same split as the web app's toDeepLink: only a fresh incoming
+        // request belongs in the owner's decision queue.
+        return notification.title?.startsWith('New request') ? '/requests' : `/exchanges/${notification.entityId}`;
       case 'listing':
         return `/books/${notification.entityId}`;
       default:

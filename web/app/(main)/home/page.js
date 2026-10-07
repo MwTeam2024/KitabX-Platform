@@ -11,7 +11,6 @@ import RadiusStepper from '@/components/discovery/RadiusStepper';
 import StatTiles from '@/components/discovery/StatTiles';
 import GenreChips from '@/components/discovery/GenreChips';
 import FilterSheet from '@/components/discovery/FilterSheet';
-import SortSheet, { SORT_OPTIONS } from '@/components/discovery/SortSheet';
 import BookGrid from '@/components/books/BookGrid';
 import { SectionTitle } from '@/components/ui/NoteBox';
 import { useBooks } from '@/hooks/useBooks';
@@ -21,6 +20,16 @@ import { useAppSheets } from '@/hooks/useAppSheets';
 import { useToast } from '@/components/ui/ToastProvider';
 import { useDebounce } from '@/hooks/useDebounce';
 import { discoveryService } from '@/services/discovery.service';
+
+const FILTERS_KEY = 'kitabx.discoveryFilters';
+
+function loadSavedFilters() {
+  try {
+    return JSON.parse(window.localStorage.getItem(FILTERS_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
 
 /**
  * Screen 04 — society-first discovery (§8). Radius, search and sort criteria are
@@ -36,11 +45,22 @@ export default function HomePage() {
   const [stats, setStats] = useState(null);
 
   const [query, setQuery] = useState('');
-  const [genre, setGenre] = useState('All');
-  const [language, setLanguage] = useState(null);
-  const [condition, setCondition] = useState(null);
-  const [sort, setSort] = useState('newest');
+  // Filters/sort are restored from the last visit so a refresh keeps them
+  // (the search text itself is deliberately not saved).
+  const [saved] = useState(loadSavedFilters);
+  const [genre, setGenre] = useState(saved.genre ?? 'All');
+  const [language, setLanguage] = useState(saved.language ?? null);
+  const [condition, setCondition] = useState(saved.condition ?? null);
+  const [sort, setSort] = useState(saved.sort ?? 'newest');
   const debouncedQuery = useDebounce(query, 300);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FILTERS_KEY, JSON.stringify({ genre, language, condition, sort }));
+    } catch {
+      // Storage blocked — filters just won't persist.
+    }
+  }, [genre, language, condition, sort]);
 
   useEffect(() => {
     searchBooks({ radiusKm, genre, language, condition, q: debouncedQuery, sort }).catch(() => {});
@@ -52,23 +72,11 @@ export default function HomePage() {
   }, []);
 
   const { books } = useBooks({ keys: discoveryKeys, genre, sort });
-  const sortLabel = SORT_OPTIONS.find((o) => o.key === sort)?.label ?? 'Newest';
   // How many distinct filter facets are active — surfaced as a number on the
-  // filter icon so it's clear at a glance without opening the sheet.
-  const filterCount = [genre !== 'All', !!language, !!condition].filter(Boolean).length;
-
-  const openSort = () => {
-    openSheet('Sort by', (
-      <SortSheet
-        value={sort}
-        onSelect={(key) => {
-          setSort(key);
-          showToast(`Sorted by ${SORT_OPTIONS.find((o) => o.key === key).label.toLowerCase()}`);
-          closeSheet();
-        }}
-      />
-    ));
-  };
+  // filter icon so it's clear at a glance without opening the sheet. A
+  // non-default sort counts too: it used to be its own visible chip, and now
+  // lives inside the sheet, so this is the only hint that it's been changed.
+  const filterCount = [genre !== 'All', !!language, !!condition, sort !== 'newest'].filter(Boolean).length;
 
   const openFilters = () => {
     openSheet('Search & Filters', (
@@ -76,10 +84,12 @@ export default function HomePage() {
         genre={genre}
         language={language}
         condition={condition}
+        sort={sort}
         onApply={(next) => {
           setGenre(next.genre || 'All');
           setLanguage(next.language);
           setCondition(next.condition);
+          setSort(next.sort || 'newest');
           showToast('Filters applied');
         }}
         onClose={closeSheet}
@@ -128,8 +138,6 @@ export default function HomePage() {
         <GenreChips
           genre={genre}
           onGenre={setGenre}
-          sortLabel={sortLabel}
-          onSort={openSort}
           onFilters={openFilters}
           filterCount={filterCount}
         />
@@ -141,8 +149,8 @@ export default function HomePage() {
         />
       </div>
 
-      <button className="fab" onClick={() => router.push('/books/add')} aria-label="List a book">
-        <Icon name="plus" />
+      <button className="fab" onClick={() => router.push('/books/add')}>
+        Add your book
       </button>
       <BottomNav />
     </>

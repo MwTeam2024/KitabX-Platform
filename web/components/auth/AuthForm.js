@@ -380,9 +380,6 @@ export default function AuthForm({ initialTab = 'signup' }) {
               value={form.whatsapp} onChange={(v) => patch({ whatsapp: v })}
               placeholder="+91 98765 43210"
             />
-            <NoteBox icon="messageCircle" style={{ marginBottom: 16 }}>
-              This is also the number other members will reach you on for exchange handovers.
-            </NoteBox>
             <SocietyFields values={form} onChange={patch} />
 
             <NoteBox icon="shieldCheck" style={{ marginBottom: 16 }}>

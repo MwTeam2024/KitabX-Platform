@@ -166,7 +166,7 @@ a{color:inherit;text-decoration:none}
 
 .book-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px}
 @media(min-width:600px){.book-grid{grid-template-columns:1fr 1fr 1fr}}
-.book-card{background:var(--surface);border-radius:16px;overflow:hidden;box-shadow:var(--shadow-sm);position:relative;transition:transform .18s ease,box-shadow .18s ease;text-align:left;border:none;display:block;width:100%}
+.book-card{background:var(--surface);border-radius:16px;overflow:hidden;box-shadow:var(--shadow-sm);position:relative;transition:transform .18s ease,box-shadow .18s ease;text-align:left;border:none;display:flex;flex-direction:column;width:100%}
 @media(hover:hover){.book-card:hover{transform:translateY(-4px);box-shadow:var(--shadow)}}
 .bc-cov{aspect-ratio:3/4;margin:8px 8px 0;border-radius:10px;overflow:hidden}
 .wish-btn{position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.94);border:none;display:flex;align-items:center;justify-content:center;color:var(--maroon);z-index:3;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:transform .13s cubic-bezier(.34,1.56,.64,1)}
@@ -176,17 +176,22 @@ a{color:inherit;text-decoration:none}
 @keyframes heartPop{0%{transform:scale(1)}35%{transform:scale(1.4)}65%{transform:scale(.88)}100%{transform:scale(1)}}
 .wish-btn.pop{animation:heartPop .4s ease}
 .tag-abs{position:absolute;top:14px;left:14px;z-index:3;font-size:10px;font-weight:700;padding:4px 9px;border-radius:7px;background:var(--brand);color:#fff}
-.bc-info{padding:10px 11px 12px}
-.bc-title{font-size:13px;font-weight:700;color:var(--text);line-height:1.25}
-.bc-author{font-size:11px;color:var(--text-muted);margin-top:2px}
-.bc-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.bc-info{padding:10px 11px 12px;flex:1;display:flex;flex-direction:column}
+/* Grid rows stretch both cards to the taller one's height; clamping the title
+   and keeping the genre pill on one line stops a long Google Books title or
+   category from making its neighbour look like it has dead space, and the
+   footer is pinned to the bottom so both cards line up either way. */
+.bc-title{font-size:13px;font-weight:700;color:var(--text);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bc-author{font-size:11px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bc-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto;padding-top:8px}
+.bc-foot .pill-tag{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bc-foot .dist{flex-shrink:0;white-space:nowrap}
 .pill-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:7px;background:var(--mint);color:var(--brand-2);display:inline-block}
 .pill-tag.lg{font-size:12px;padding:6px 14px;border-radius:9px}
 .dist{display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text-faint)}
 .dist .ic{width:10px;height:10px}
 
-.fab{position:fixed;bottom:calc(90px + env(safe-area-inset-bottom));right:calc(16px + max(0px, (100vw - 800px) / 2));width:52px;height:52px;border-radius:50%;background:var(--brand);border:none;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(18,61,37,.45);z-index:80;transition:transform .15s cubic-bezier(.34,1.56,.64,1)}
-.fab .ic{width:22px;height:22px}
+.fab{position:fixed;bottom:calc(90px + env(safe-area-inset-bottom));right:calc(16px + max(0px, (100vw - 800px) / 2));height:42px;padding:0 20px;border-radius:999px;background:var(--brand);border:none;color:#fff;font-size:13.5px;font-weight:700;letter-spacing:.01em;white-space:nowrap;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(18,61,37,.45);z-index:80;transition:transform .15s cubic-bezier(.34,1.56,.64,1)}
 .fab:active{transform:scale(.9)}
 
 /* bottom nav */
@@ -421,6 +426,10 @@ a{color:inherit;text-decoration:none}
 .welcome-mark{width:100%;display:flex;flex-direction:column;align-items:center}
 .welcome-logo{height:auto;width:min(72%,300px);aspect-ratio:827/302;padding:0;border-radius:0}
 .welcome-tagline{font-size:clamp(17px,5.2vw,22px);font-weight:700;color:var(--text);letter-spacing:-.01em;margin-top:10px}
+/* The separators are drawn circles inside a centred flex row, not "." / "·"
+   characters, so they sit on the text's vertical middle in any font. */
+.welcome-sub{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;font-size:clamp(13px,3.8vw,15px);font-weight:600;color:var(--text-muted);letter-spacing:.02em}
+.welcome-dot{display:block;width:4px;height:4px;border-radius:50%;background:var(--brand-2);flex-shrink:0}
 .welcome-actions{width:100%;max-width:340px;margin-top:clamp(52px,15vh,132px);display:flex;flex-direction:column;gap:14px}
 .welcome-btn{padding:16px 18px;font-size:16px;letter-spacing:-.01em}
 .welcome-btn.btn-white{color:var(--text);box-shadow:var(--shadow-sm)}

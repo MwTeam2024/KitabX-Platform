@@ -98,8 +98,9 @@ export class PickupService {
         type: 'PICKUP',
         title: 'Pickup confirmed',
         body: `Your proposed pickup for "${request.listing.book.title}" was confirmed.`,
+        // Request id, not Exchange.id — see requests.service.js accept().
         entityType: 'exchange',
-        entityId: request.exchange.id,
+        entityId: requestId,
       });
 
       return updated;
@@ -143,8 +144,9 @@ export class PickupService {
       type: 'PICKUP',
       title: isReschedule ? 'New pickup time proposed' : 'Pickup time proposed',
       body: `${pickup.pickupDate} · ${pickup.timeSlot} for "${request.listing.book.title}" — confirm or wait for it to change.`,
+      // Request id, not Exchange.id — see requests.service.js accept().
       entityType: 'exchange',
-      entityId: request.exchange.id,
+      entityId: request.id,
     });
   }
 }

@@ -100,9 +100,17 @@ export function AppDataProvider({ children }) {
   // would flicker to "no books nearby" for a radius that plainly has some.
   // Only the most recently *initiated* call is allowed to commit state.
   const searchRequestIdRef = useRef(0);
+  // Background refreshes (post-publish, live updates) call this with no
+  // params at all — which meant the server's own defaults (0.5 km, no
+  // filters) and silently replaced whatever radius/genre/sort the member had
+  // actually chosen with that default result set. Empty calls now reuse the
+  // last real search instead.
+  const lastSearchParamsRef = useRef({});
   const searchBooks = useCallback(async (params) => {
     const myId = ++searchRequestIdRef.current;
-    const { listings } = await discoveryService.search(params);
+    const hasParams = params && Object.keys(params).length > 0;
+    if (hasParams) lastSearchParamsRef.current = params;
+    const { listings } = await discoveryService.search(hasParams ? params : lastSearchParamsRef.current);
     if (myId !== searchRequestIdRef.current) return listings; // superseded by a newer call
     mergeListings(listings);
     setDiscoveryKeys(listings.map((l) => l.key));
@@ -200,12 +208,16 @@ export function AppDataProvider({ children }) {
 
   const getExchange = useCallback((id) => exchanges.find((e) => e.id === id) || null, [exchanges]);
 
+  // Resolves to the exchange's canonical id (its request's id — what
+  // `exchanges[].id` holds), or false if it doesn't exist. The API also
+  // accepts an Exchange row's own id, which older notifications link with,
+  // so the canonical id can differ from the one asked for.
   const ensureExchange = useCallback(async (id) => {
-    if (exchanges.some((e) => e.id === id)) return true;
+    if (exchanges.some((e) => e.id === id)) return id;
     const detail = await exchangesService.get(id).catch(() => null);
     if (!detail) return false;
     setExchanges((list) => upsertBy(list, withExchangeCover({ ...detail, status: detail.requestStatus === 'COMPLETED' ? 'done' : undefined })));
-    return true;
+    return detail.id;
   }, [exchanges]);
 
   const refreshExchangeDetail = useCallback(async (id) => {
