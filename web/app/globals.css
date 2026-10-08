@@ -246,7 +246,17 @@ a{color:inherit;text-decoration:none}
 .input-ic-badge .ic{width:14px;height:14px}
 .field input,.field select,.field textarea{width:100%;padding:13px 14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);font-size:16px;outline:none;color:var(--text);transition:border-color .15s ease,box-shadow .15s ease}
 .field input.has-badge,.field select.has-badge{padding-left:46px}
+/* "✕" inside a text field that wipes it in one tap — room on the right so long text doesn't run under it. */
+.field input.has-clear{padding-right:44px}
+.input-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:50%;border:none;background:rgba(18,61,37,.08);color:var(--text-muted);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
+.input-clear .ic{width:13px;height:13px}
+.input-clear:active{background:rgba(18,61,37,.16)}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(31,122,70,.14)}
+/* A field that can't be used yet must look it (e.g. Society before a city is typed) —
+   otherwise people tap it and try to type into a box that ignores them.
+   -webkit-text-fill-color is what iOS Safari uses to colour disabled text. */
+.field input:disabled,.field select:disabled,.field textarea:disabled{background:rgba(18,61,37,.05);border-style:dashed;color:var(--text-faint);-webkit-text-fill-color:var(--text-faint);opacity:1;cursor:not-allowed}
+.field .input-wrap:has(:disabled) .input-ic-badge{opacity:.45}
 .field textarea{resize:none;min-height:80px;font-family:inherit}
 /* ListSelect: looks like the form's selects, but its list is capped at ten rows */
 .list-select{position:relative}

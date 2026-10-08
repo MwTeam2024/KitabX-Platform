@@ -129,6 +129,13 @@ export default function SocietyFields({ values, onChange }) {
                 disabled={loading}
               />
             </div>
+            {/* The Society dropdown below stays locked until a city is typed — say so
+                right under the field that unlocks it. */}
+            {!loading && !cityText.trim() && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                Enter your city to find a society.
+              </p>
+            )}
           </div>
 
           <div className="field">
@@ -144,7 +151,7 @@ export default function SocietyFields({ values, onChange }) {
               >
                 <option value="">
                   {loading ? 'Loading societies…'
-                    : !cityText.trim() ? 'Type your city first'
+                    : !cityText.trim() ? 'Select your society'
                     : !matchedCity ? "We don't have society yet"
                     : societiesInCity.length ? 'Select your society' : 'No societies listed in this city yet'}
                 </option>

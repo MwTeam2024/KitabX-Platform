@@ -190,6 +190,11 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
     }, SEARCH_DEBOUNCE_MS);
   };
 
+  const clearAddress = () => {
+    onAddressInput('');
+    document.getElementById(inputId)?.focus();
+  };
+
   const useCurrentLocation = () => {
     setExpanded(true);
     if (!navigator.geolocation) return;
@@ -241,12 +246,20 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
           <span className="input-ic-badge"><Icon name="home" style={{ width: 14, height: 14 }} /></span>
           <input
             id={inputId}
-            className="has-badge"
+            className={`has-badge${address ? ' has-clear' : ''}`}
             placeholder={placeholder}
             value={address || ''}
             onChange={(e) => onAddressInput(e.target.value)}
             onFocus={() => setExpanded(true)}
           />
+          {/* The address arrives pre-filled from the map, and people mostly
+              need to write their own (flat/tower…) — one tap wipes it
+              instead of deleting character by character. The pin stays put. */}
+          {address ? (
+            <button type="button" className="input-clear" aria-label="Clear address" onClick={clearAddress}>
+              <Icon name="x" />
+            </button>
+          ) : null}
         </div>
         <button
           type="button"
