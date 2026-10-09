@@ -181,6 +181,14 @@ export default function LocationMapPicker({ address, lat, lng, onChange, label =
   const onAddressInput = (text) => {
     setExpanded(true);
     requestIdRef.current += 1; // invalidate any reverse-geocode already in flight from the old position
+    // A location fix that arrived before the map existed is still parked in
+    // pendingMoveRef and gets applied (WITH an address write-back) the moment
+    // the map loads — which is right after this very keystroke/clear opens it.
+    // Confirmed live: tapping ✕ on the pre-filled address emptied the field
+    // and ~100ms later the map finished loading and put the address back, so
+    // the first tap looked like it did nothing. Once the visitor has touched
+    // the field, that parked fix may still move the pin, never rewrite the text.
+    if (pendingMoveRef.current) pendingMoveRef.current = { ...pendingMoveRef.current, opts: { updateAddress: false } };
     onChangeRef.current({ lat, lng, address: text });
     clearTimeout(searchTimerRef.current);
     if (!text.trim() || !GOOGLE_GEOCODING_API_KEY) return;
