@@ -8,7 +8,9 @@
  *    authenticated API responses indiscriminately").
  */
 
-const VERSION = 'kitabx-v1';
+// Bumped when files under /icons/ change: they are cached cache-first, so
+// devices that already have this worker would otherwise keep the old icons.
+const VERSION = 'kitabx-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 const OFFLINE_URL = '/offline';
