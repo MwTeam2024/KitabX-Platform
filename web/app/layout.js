@@ -1,7 +1,9 @@
 import { Merriweather, Nunito_Sans } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import ServiceWorkerRegistrar from "@/components/pwa/ServiceWorkerRegistrar";
+import InstallBanner from "@/components/pwa/InstallBanner";
 
 // Self-hosted via next/font — feeds globals.css's `--font-display`/
 // `--font-body` variables (see there for the fallback stack).
@@ -42,13 +44,23 @@ export const viewport = {
   themeColor: "#123D25",
 };
 
+// Chrome/Edge fire `beforeinstallprompt` ONCE, a few hundred ms after load —
+// before the app's JavaScript has even run, so a listener added from React is too
+// late and the "Add to Home Screen" button would never get the install prompt
+// (confirmed: the event fired in a clean Chrome profile and the banner still
+// showed the manual steps). This tiny inline script runs before any Next.js
+// code, keeps the event, and components/pwa/InstallBanner.js picks it up.
+const CAPTURE_INSTALL_PROMPT = `window.__kxInstallPrompt=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__kxInstallPrompt=e;});`;
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${merriweather.variable} ${nunitoSans.variable}`}>
       <body>
+        <Script id="capture-install-prompt" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: CAPTURE_INSTALL_PROMPT }} />
         <Providers>
           {children}
           <ServiceWorkerRegistrar />
+          <InstallBanner />
         </Providers>
       </body>
     </html>

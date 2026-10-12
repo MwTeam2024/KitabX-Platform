@@ -519,6 +519,19 @@ a{color:inherit;text-decoration:none}
   max-width:min(800px,100vw);box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .pwa-banner button{background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:999px;padding:4px 12px;font-size:11.5px;font-weight:700;flex-shrink:0}
 
+/* "Add to home screen" card — top of the screen, a few seconds after the app opens */
+.install-banner{position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top));z-index:940;width:min(calc(100vw - 24px),420px);background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:10px 10px 10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.18);animation:install-in .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes install-in{from{opacity:0;transform:translateX(-50%) translateY(-14px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.install-row{display:flex;align-items:center;gap:10px}
+.install-icon{width:40px;height:40px;border-radius:10px;flex-shrink:0}
+.install-text{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.install-text b{font-size:13px}
+.install-text span{font-size:11.5px;color:var(--text-muted)}
+.install-btn{background:var(--brand);color:#fff;border:none;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;font-family:inherit;white-space:nowrap}
+.install-x{width:28px;height:28px;border-radius:50%;border:none;background:rgba(18,61,37,.08);color:var(--text-muted);display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;cursor:pointer}
+.install-x .ic{width:13px;height:13px}
+.install-help{margin:10px 2px 2px;font-size:12.5px;line-height:1.55;color:var(--text)}
+@media (prefers-reduced-motion:reduce){.install-banner{animation:none}}
 .toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--brand-deep);color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:.34s cubic-bezier(.34,1.56,.64,1);z-index:900;display:flex;align-items:center;gap:8px;white-space:nowrap;box-shadow:0 10px 24px rgba(0,0,0,.3);pointer-events:none;max-width:calc(100vw - 32px)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast .tdot{width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0}
