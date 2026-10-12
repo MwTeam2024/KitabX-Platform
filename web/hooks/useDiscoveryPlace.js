@@ -24,6 +24,49 @@ function savePlace(place) {
   }
 }
 
+// The last fix the GPS gave, kept on this device only (never sent anywhere) so a
+// reload can use it straight away instead of waiting on a fresh GPS read that
+// phones are slow or unwilling to give with no tap behind it. Stale after 12h.
+const FIX_KEY = 'kitabx.discoveryFix';
+const FIX_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+// A fresh fix this close to the remembered one is the same place (GPS jitter),
+// so it must not re-run the book search.
+const SAME_PLACE_KM = 0.15;
+
+function loadFix() {
+  try {
+    const f = JSON.parse(window.localStorage.getItem(FIX_KEY));
+    if (f && Number.isFinite(f.lat) && Number.isFinite(f.lng) && Date.now() - f.at < FIX_MAX_AGE_MS) {
+      return { lat: f.lat, lng: f.lng };
+    }
+  } catch {
+    // Unreadable or blocked — treated as no remembered fix.
+  }
+  return null;
+}
+
+function saveFix(fix) {
+  try {
+    window.localStorage.setItem(FIX_KEY, JSON.stringify({ lat: fix.lat, lng: fix.lng, at: Date.now() }));
+  } catch {
+    // Storage blocked — a reload just has to read the GPS again.
+  }
+}
+
+function clearFix() {
+  try {
+    window.localStorage.removeItem(FIX_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+function distanceKm(a, b) {
+  const dLat = (a.lat - b.lat) * 111;
+  const dLng = (a.lng - b.lng) * 111 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
 function getPosition(options) {
   return new Promise((resolve, reject) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -72,14 +115,17 @@ function locateErrorMessage(err) {
 
 /**
  * Where Discover is centred: the member's `home` society (the default), or
- * their `current` GPS location while travelling. Only the choice is
- * remembered — never the coordinates — and "current" re-reads the GPS on each
- * visit, since someone who chose it yesterday may be somewhere else today.
+ * their `current` GPS location while travelling.
  *
- * The remembered choice is the member's, so a reload that can't get a fix
- * (flaky GPS, no signal) must not overwrite it: that visit shows the home
- * society (and says so), the choice stays "current", and the next reload or a
- * tap on "Current location" tries again.
+ * The choice is remembered, and so is the last GPS fix (on this device only,
+ * 12h) — a reload shows "current" at once from that fix and re-reads the GPS
+ * in the background, moving to the new position only if it really differs. A
+ * phone often can't (or won't) give a fresh fix on a bare page load, so a
+ * reload must not depend on one.
+ *
+ * With no recent fix to fall back on and a GPS read that fails, that visit
+ * shows the home society (and says so) but the choice stays "current", so the
+ * next reload or a tap on "Current location" tries again.
  *
  *   place    what Discover is actually centred on right now: 'current' only
  *            once a fix is in, otherwise 'home'
@@ -92,25 +138,35 @@ export function useDiscoveryPlace() {
   const showToast = useToast();
   // The remembered choice — not necessarily what's showing (see above).
   const [wanted, setWanted] = useState(loadPlace);
-  const [origin, setOrigin] = useState(null);
+  // Start from the remembered fix, so a reload shows "current" immediately.
+  const [origin, setOrigin] = useState(() => (loadPlace() === 'current' ? loadFix() : null));
   const [failed, setFailed] = useState(false);
 
-  // A saved "current" has no coordinates yet on a fresh load — fetch them.
+  // On a load with "current" saved, read the GPS again — the member may have
+  // moved. With a remembered fix already showing, a failed read is silent and
+  // a successful one only replaces it if it's a different place.
   useEffect(() => {
-    if (wanted !== 'current' || origin) return undefined;
+    if (wanted !== 'current') return undefined;
+    const hadFix = origin !== null;
     let cancelled = false;
     locate().then(
-      (fix) => { if (!cancelled) { setOrigin(fix); setFailed(false); } },
-      (err) => {
+      (fix) => {
         if (cancelled) return;
+        saveFix(fix);
+        setFailed(false);
+        setOrigin((prev) => (prev && distanceKm(prev, fix) < SAME_PLACE_KM ? prev : fix));
+      },
+      (err) => {
+        if (cancelled || hadFix) return;
         setFailed(true);
         showToast(`${locateErrorMessage(err)} Showing your home society — pick Current location to try again.`, 6000);
       },
     );
     return () => { cancelled = true; };
-    // `origin` is deliberately not a dependency: this only fills it in once.
+    // Once, on load, for whatever was remembered. Choosing from the sheet does
+    // its own GPS read in `choose`, so it must not trigger this one as well.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted]);
+  }, []);
 
   // Name the fix so the header can say where "current location" is. Purely
   // cosmetic: if the lookup fails the header just keeps saying "Current location".
@@ -131,6 +187,7 @@ export function useDiscoveryPlace() {
   const choose = useCallback(async (next) => {
     if (next === 'home') {
       savePlace('home');
+      clearFix();
       setWanted('home');
       setOrigin(null);
       setFailed(false);
@@ -145,6 +202,7 @@ export function useDiscoveryPlace() {
       throw new Error(locateErrorMessage(err));
     }
     savePlace('current');
+    saveFix(fix);
     setOrigin(fix);
     setFailed(false);
     setWanted('current');
