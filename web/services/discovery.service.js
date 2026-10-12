@@ -9,9 +9,14 @@ export const discoveryService = {
   // genre / language / condition are lists (any of them matches) — sent as
   // repeated params rather than comma-joined, since a genre like "Fiction,
   // science fiction, general" has commas of its own.
-  search: ({ radiusKm, genre, language, condition, q, sort } = {}) => {
+  search: ({ radiusKm, lat, lng, genre, language, condition, q, sort } = {}) => {
     const params = new URLSearchParams();
     if (radiusKm != null) params.set("radiusKm", radiusKm);
+    // Browse around a point (the viewer's current location) instead of their own society.
+    if (lat != null && lng != null) {
+      params.set("lat", lat);
+      params.set("lng", lng);
+    }
     [["genre", genre], ["language", language], ["condition", condition]].forEach(([key, values]) => {
       [values].flat().filter((v) => v && v !== "All").forEach((v) => params.append(key, v));
     });

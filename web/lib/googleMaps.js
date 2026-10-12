@@ -51,6 +51,26 @@ export async function reverseGeocode(apiKey, lat, lng) {
   return data.status === 'OK' && data.results[0] ? data.results[0].formatted_address : '';
 }
 
+/** A short, human place name for a point — "Powai, Mumbai" — rather than the
+ * full street address `reverseGeocode` returns. Neighbourhood + city, or just
+ * the city when there's no neighbourhood; '' when Google can't name it. */
+export async function reverseGeocodePlace(apiKey, lat, lng) {
+  const url = `${GEOCODE_URL}?latlng=${lat},${lng}&key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.status !== 'OK') return '';
+  const find = (...types) => {
+    for (const result of data.results) {
+      const hit = result.address_components?.find((c) => types.some((t) => c.types.includes(t)));
+      if (hit) return hit.long_name;
+    }
+    return '';
+  };
+  const area = find('sublocality_level_1', 'sublocality', 'neighborhood');
+  const city = find('locality', 'administrative_area_level_2');
+  return [area, city].filter((p, i, all) => p && all.indexOf(p) === i).join(', ');
+}
+
 export async function geocodeAddress(apiKey, address) {
   const url = `${GEOCODE_URL}?address=${encodeURIComponent(address)}&key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url);

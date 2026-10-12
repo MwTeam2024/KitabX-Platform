@@ -12,11 +12,13 @@ import StatTiles from '@/components/discovery/StatTiles';
 import FilterChips from '@/components/discovery/FilterChips';
 import FacetSheet from '@/components/discovery/FacetSheet';
 import SortSheet from '@/components/discovery/SortSheet';
+import PlaceSheet from '@/components/discovery/PlaceSheet';
 import FilterSheet from '@/components/discovery/FilterSheet';
 import BookGrid from '@/components/books/BookGrid';
 import { SectionTitle } from '@/components/ui/NoteBox';
 import { useBooks } from '@/hooks/useBooks';
 import { useFacets } from '@/hooks/useFacets';
+import { useDiscoveryPlace } from '@/hooks/useDiscoveryPlace';
 import { CONDITIONS } from '@/lib/mockData';
 import { useLocation } from '@/hooks/useLocation';
 import { useAppData } from '@/contexts/AppDataContext';
@@ -65,6 +67,8 @@ export default function HomePage() {
   const facets = useFacets();
   const [sort, setSort] = useState(saved.sort ?? 'newest');
   const debouncedQuery = useDebounce(query, 300);
+  // Home society, or the member's current GPS location while travelling.
+  const { place, origin, placeName, waiting, choose: choosePlace } = useDiscoveryPlace();
 
   useEffect(() => {
     try {
@@ -75,9 +79,12 @@ export default function HomePage() {
   }, [genre, language, condition, sort]);
 
   useEffect(() => {
-    searchBooks({ radiusKm, genre, language, condition, q: debouncedQuery, sort }).catch(() => {});
+    // "Current location" is chosen but the GPS fix hasn't arrived — searching
+    // now would flash the home society's books under a "current location" label.
+    if (waiting) return;
+    searchBooks({ radiusKm, lat: origin?.lat, lng: origin?.lng, genre, language, condition, q: debouncedQuery, sort }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [radiusKm, genre, language, condition, debouncedQuery, sort]);
+  }, [radiusKm, origin, waiting, genre, language, condition, debouncedQuery, sort]);
 
   useEffect(() => {
     discoveryService.stats().then(setStats).catch(() => {});
@@ -110,6 +117,17 @@ export default function HomePage() {
     ));
   };
 
+  const openPlace = () => {
+    openSheet('Browse books near', (
+      <PlaceSheet
+        value={place}
+        societyName={user?.society?.name}
+        onChoose={choosePlace}
+        onDone={closeSheet}
+      />
+    ));
+  };
+
   const openFilters = () => {
     openSheet('Search & Filters', (
       <FilterSheet
@@ -132,10 +150,11 @@ export default function HomePage() {
   return (
     <>
       <ScreenHeader right={<HeaderActions />}>
-        <div className="loc-pill" style={{ cursor: 'default' }}>
+        <button className="loc-pill" onClick={openPlace} aria-label="Change where to browse books">
           <Icon name="mapPin" />
-          <span>{user?.society?.name || 'Your society'}</span>
-        </div>
+          <span>{place === 'current' ? (placeName || 'Current location') : (user?.society?.name || 'Your society')}</span>
+          <Icon name="chevronDown" style={{ width: 11, height: 11 }} />
+        </button>
         <div className="search-wrap">
           <Icon name="search" className="ic search-ic" />
           <input

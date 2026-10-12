@@ -1,4 +1,4 @@
-import { Dependencies, Injectable } from '@nestjs/common';
+import { BadRequestException, Dependencies, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../common/redis/redis.service';
 import { toBookListingLocation } from '../common/serializers/user.serializer';
@@ -30,15 +30,23 @@ export class DiscoveryService {
     this.redis = redis;
   }
 
-  async discover(viewer, { radiusKm = 0.5, genre = [], language = [], condition = [], q, sort = 'newest' } = {}) {
-    if (!viewer.societyId) {
+  async discover(viewer, { radiusKm = 0.5, lat, lng, genre = [], language = [], condition = [], q, sort = 'newest' } = {}) {
+    // `lat`/`lng` = browse around a point (e.g. the viewer's current location
+    // while travelling) instead of around their own society.
+    const hasPoint = lat != null && lng != null;
+    if (hasPoint && (Math.abs(lat) > 90 || Math.abs(lng) > 180)) {
+      throw new BadRequestException('Invalid location.');
+    }
+    if (!viewer.societyId && !hasPoint) {
       return { listings: [], note: 'Join a society to see books nearby.' };
     }
 
     // Independent of each other — fired together instead of stacking two
     // sequential round trips to Neon.
     const [nearbySocieties, received] = await Promise.all([
-      this._societiesWithinRadius(viewer.societyId, radiusKm),
+      hasPoint
+        ? this._societiesNearPoint(lat, lng, radiusKm)
+        : this._societiesWithinRadius(viewer.societyId, radiusKm),
       this.prisma.exchange.findMany({
         // A book already sitting on the viewer's own shelf shouldn't be
         // offered to them again, even as a different member's copy.
@@ -46,10 +54,11 @@ export class DiscoveryService {
         select: { listing: { select: { bookId: true } } },
       }),
     ]);
-    if (!nearbySocieties.length) {
+    if (!nearbySocieties.length && !hasPoint) {
       // No coordinates set on the society yet (e.g. a freshly admin-created
       // one) — fall back to same-society-only discovery rather than showing
-      // nothing.
+      // nothing. Not for a browse-near-here point: nothing within range there
+      // really is an empty result, and the viewer's own society may be far away.
       nearbySocieties.push({ societyId: viewer.societyId, distanceMeters: 0 });
     }
     const distanceBySociety = new Map(nearbySocieties.map((s) => [s.societyId, s.distanceMeters]));
@@ -216,6 +225,25 @@ export class DiscoveryService {
         AND s.location IS NOT NULL
         AND origin.location IS NOT NULL
         AND ST_DWithin(s.location, origin.location, ${radiusKm * 1000})
+      ORDER BY "distanceMeters" ASC
+    `;
+  }
+
+  /**
+   * Same as above but measured from an arbitrary point (lat/lng, WGS84)
+   * instead of a society — for browsing around wherever the viewer currently
+   * is. A radius of 0 ("own society only") has no meaning without a society,
+   * so it falls back to the smallest selectable radius.
+   */
+  async _societiesNearPoint(lat, lng, radiusKm) {
+    const meters = (radiusKm > 0 ? radiusKm : 0.5) * 1000;
+    return this.prisma.$queryRaw`
+      SELECT s.id AS "societyId", ST_Distance(s.location, p.pt) AS "distanceMeters"
+      FROM societies s,
+           (SELECT ST_SetSRID(ST_MakePoint(${lng}::float8, ${lat}::float8), 4326)::geography AS pt) AS p
+      WHERE s.is_active = true
+        AND s.location IS NOT NULL
+        AND ST_DWithin(s.location, p.pt, ${meters}::float8)
       ORDER BY "distanceMeters" ASC
     `;
   }

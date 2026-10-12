@@ -9,6 +9,12 @@ function toList(value) {
   return [value].flat().filter((v) => typeof v === 'string' && v.trim() && v !== 'All').map((v) => v.trim());
 }
 
+/** A coordinate from the query string: a finite number, or undefined if absent/garbage. */
+function toCoord(value) {
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 @Dependencies(DiscoveryService)
 @UseGuards(JwtAuthGuard)
 @Controller('discovery')
@@ -22,6 +28,10 @@ export class DiscoveryController {
   discover(viewer, query) {
     return this.discovery.discover(viewer, {
       radiusKm: query.radiusKm ? parseFloat(query.radiusKm) : undefined,
+      // Optional "browse near here" point (a traveller's current location) —
+      // when both are present it replaces the viewer's own society as the centre.
+      lat: toCoord(query.lat),
+      lng: toCoord(query.lng),
       genre: toList(query.genre),
       language: toList(query.language),
       condition: toList(query.condition),
