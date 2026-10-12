@@ -29,6 +29,19 @@ function savePlace(place) {
 // phones are slow or unwilling to give with no tap behind it. Stale after 12h.
 const FIX_KEY = 'kitabx.discoveryFix';
 const FIX_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+// On iOS the remembered fix is all a reload has (see below), so it must still
+// be about where the member is: an hour, not half a day.
+const IOS_FIX_MAX_AGE_MS = 60 * 60 * 1000;
+
+/** Any browser on an iPhone/iPad (they all run WebKit). iPadOS reports itself
+ * as a Mac, hence the touch-points check. */
+function isIOS() {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+const fixMaxAge = () => (isIOS() ? IOS_FIX_MAX_AGE_MS : FIX_MAX_AGE_MS);
 // A fresh fix this close to the remembered one is the same place (GPS jitter),
 // so it must not re-run the book search.
 const SAME_PLACE_KM = 0.15;
@@ -36,7 +49,7 @@ const SAME_PLACE_KM = 0.15;
 function loadFix() {
   try {
     const f = JSON.parse(window.localStorage.getItem(FIX_KEY));
-    if (f && Number.isFinite(f.lat) && Number.isFinite(f.lng) && Date.now() - f.at < FIX_MAX_AGE_MS) {
+    if (f && Number.isFinite(f.lat) && Number.isFinite(f.lng) && Date.now() - f.at < fixMaxAge()) {
       return { lat: f.lat, lng: f.lng };
     }
   } catch {
@@ -123,9 +136,14 @@ function locateErrorMessage(err) {
  * phone often can't (or won't) give a fresh fix on a bare page load, so a
  * reload must not depend on one.
  *
- * With no recent fix to fall back on and a GPS read that fails, that visit
- * shows the home society (and says so) but the choice stays "current", so the
- * next reload or a tap on "Current location" tries again.
+ * iOS is the exception: WebKit asks for location permission again on every GPS
+ * read after a reload, even once it was allowed. So on iOS a reload never
+ * reads the GPS — it only uses the remembered fix (valid for an hour) — and a
+ * fresh read happens when the member taps "Current location".
+ *
+ * With no recent fix to fall back on (or, off iOS, a GPS read that fails), that
+ * visit shows the home society (and says so) but the choice stays "current", so
+ * the next reload or a tap on "Current location" tries again.
  *
  *   place    what Discover is actually centred on right now: 'current' only
  *            once a fix is in, otherwise 'home'
@@ -140,7 +158,9 @@ export function useDiscoveryPlace() {
   const [wanted, setWanted] = useState(loadPlace);
   // Start from the remembered fix, so a reload shows "current" immediately.
   const [origin, setOrigin] = useState(() => (loadPlace() === 'current' ? loadFix() : null));
-  const [failed, setFailed] = useState(false);
+  // On iOS a load with "current" saved but no usable remembered fix has nothing
+  // to show and (see above) won't read the GPS, so it starts out at home.
+  const [failed, setFailed] = useState(() => loadPlace() === 'current' && isIOS() && !loadFix());
 
   // On a load with "current" saved, read the GPS again — the member may have
   // moved. With a remembered fix already showing, a failed read is silent and
@@ -148,6 +168,10 @@ export function useDiscoveryPlace() {
   useEffect(() => {
     if (wanted !== 'current') return undefined;
     const hadFix = origin !== null;
+    if (isIOS()) {
+      if (!hadFix) showToast('Showing your home society — pick Current location to find where you are.', 6000);
+      return undefined;
+    }
     let cancelled = false;
     locate().then(
       (fix) => {
