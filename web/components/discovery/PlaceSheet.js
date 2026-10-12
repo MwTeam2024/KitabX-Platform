@@ -14,9 +14,10 @@ export default function PlaceSheet({ value, societyName, onChoose, onDone }) {
   const pick = async (next) => {
     if (busy) return;
     setError('');
-    // Picking "Current location" again re-reads the GPS (the member may have
-    // moved since); only "Home society" is a no-op when already chosen.
-    if (next === 'home' && value === 'home') { onDone(); return; }
+    // Always go through onChoose, even for what looks already selected:
+    // "Current location" again re-reads the GPS (the member may have moved),
+    // and "Home society" must still replace a remembered "current" whose GPS
+    // read failed — the screen already shows home then, but the saved choice doesn't.
     setBusy(true);
     try {
       await onChoose(next);
