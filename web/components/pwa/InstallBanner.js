@@ -144,7 +144,7 @@ export default function InstallBanner() {
           onClick={deferred ? install : () => setHelpOpen((o) => !o)}
           aria-expanded={deferred ? undefined : helpOpen}
         >
-          Add to Home Screen
+          Install
         </button>
         <button className="install-x" onClick={dismiss} aria-label="Close">
           <Icon name="x" />
