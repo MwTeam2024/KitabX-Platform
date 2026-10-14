@@ -192,7 +192,7 @@ a{color:inherit;text-decoration:none}
 
 /* checkbox pick-lists (Discover filters) */
 /* ten rows (11px padding x2 + 24px) then scroll */
-.check-list{max-height:min(460px,58vh);overflow-y:auto;overscroll-behavior:contain}
+.check-list{max-height:min(370px,58vh);overflow-y:auto;overscroll-behavior:contain}
 .check-row{display:flex;align-items:center;gap:14px;padding:11px 2px;font-size:15px;color:var(--text);cursor:pointer}
 .check-row input{appearance:none;-webkit-appearance:none;width:22px;height:22px;border:1.5px solid #c5ccd6;border-radius:6px;background:#fff;display:grid;place-content:center;flex-shrink:0;margin:0}
 .check-row input:checked{background:var(--brand-2);border-color:var(--brand-2)}
@@ -265,11 +265,16 @@ a{color:inherit;text-decoration:none}
 .list-select-btn{width:100%;padding:13px 14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);font-size:16px;color:var(--text);display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left}
 .list-select-btn.empty{color:var(--text-muted)}
 .list-select-btn[aria-expanded="true"]{border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(31,122,70,.14)}
-.list-select-panel{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;box-shadow:var(--shadow);max-height:min(458px,70vh);overflow-y:auto;overscroll-behavior:contain;padding:4px 0}
+.list-select-panel{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;box-shadow:var(--shadow);max-height:min(284px,70vh);overflow-y:auto;overscroll-behavior:contain;padding:4px 0}
 .list-select-panel.wide{width:calc(200% + 10px)}
 .list-select-panel.right{left:auto;right:0}
 .list-select-opt{display:block;width:100%;text-align:left;padding:11px 14px;min-height:44px;line-height:22px;font-size:15px;color:var(--text);background:none;border:none}
+.list-select-opt{transition:background-color .12s ease}
+/* Hover only where there is a real pointer — on touch a hover state would stick to the last tapped row. */
+@media (hover:hover){.list-select-opt:hover{background:var(--mint)}}
+.list-select-opt:focus-visible{background:var(--mint);outline:none}
 .list-select-opt.on{background:var(--mint);color:var(--brand-2);font-weight:700}
+@media (hover:hover){.list-select-opt.on:hover{background:#cfe7d6}}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .note-box{background:var(--mint);border-radius:12px;padding:12px 14px;display:flex;gap:9px;align-items:flex-start;font-size:12px;color:var(--brand-2);line-height:1.5}
 .note-box .ic{width:15px;height:15px;flex-shrink:0;margin-top:1px}
@@ -344,12 +349,19 @@ a{color:inherit;text-decoration:none}
 .bulk-spinner{width:46px;height:46px;border-radius:50%;border:3.5px solid var(--line);border-top-color:var(--brand-2);margin:0 auto;animation:bulkspin 0.85s linear infinite}
 @keyframes bulkspin{to{transform:rotate(360deg)}}
 .locate-spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--brand-2);animation:bulkspin 0.7s linear infinite}
-.bulk-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;margin-bottom:9px;background:var(--surface);cursor:pointer;transition:opacity .15s ease}
+.bulk-item{position:relative;display:flex;align-items:flex-start;gap:10px;padding:20px 12px 12px;border:1.5px solid var(--line);border-radius:14px;margin-bottom:18px;background:var(--surface);transition:opacity .15s ease}
 .bulk-item.off{opacity:.42}
-.bulk-check{width:17px;height:17px;flex-shrink:0;accent-color:var(--brand-2)}
-.bulk-item-info{flex:1;min-width:0}
-.bulk-item-info b{font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bulk-item-info span{font-size:11.5px;color:var(--text-muted)}
+.bulk-check{width:22px;height:22px;flex-shrink:0;margin:10px 0 0;accent-color:var(--brand-2);cursor:pointer}
+.bulk-input{display:block;width:100%;min-height:40px;padding:8px 10px;border-radius:10px;border:1.5px solid rgba(18,61,37,.2);background:#F4F1E8;font-size:16px;font-family:inherit;color:var(--text);outline:none;text-overflow:ellipsis;transition:border-color .15s ease,box-shadow .15s ease,background-color .15s ease}
+.bulk-input::placeholder{color:var(--text-muted)}
+.bulk-input:focus{background:var(--surface);border-color:var(--brand-2);box-shadow:0 0 0 3px rgba(31,122,70,.14)}
+.bulk-fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.bulk-row2{display:grid;grid-template-columns:1fr;gap:6px}
+@media (min-width:520px){.bulk-row2{grid-template-columns:1fr 1fr}}
+@media (max-width:519px){.bulk-fields .list-select-panel.wide{width:100%}.bulk-fields .list-select-panel.right{left:0;right:auto}}
+.bulk-pill{position:absolute;top:-.75px;transform:translateY(-50%);right:12px;margin:0;z-index:2;font-size:11px;padding:3px 10px}
+.bulk-fields .list-select-btn{padding:8px 10px;min-height:40px;border-radius:10px;border-color:rgba(18,61,37,.2);background:#F4F1E8;font-size:16px}
+.bulk-fields .list-select-btn[aria-expanded="true"]{background:var(--surface)}
 
 /* stamp / success */
 .success-badge{width:130px;height:130px;border-radius:50%;background:var(--mint);border:3px solid var(--brand-2);display:flex;align-items:center;justify-content:center;margin:0 auto;color:var(--brand-2)}

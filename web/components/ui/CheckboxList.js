@@ -1,6 +1,6 @@
 'use client';
 
-/** Checkbox list that shows ten rows at a time and scrolls for the rest. */
+/** Checkbox list that shows eight rows at a time and scrolls for the rest (see .check-list). */
 export default function CheckboxList({ options, selected, onToggle }) {
   return (
     <div className="check-list">

@@ -7,6 +7,8 @@ import NoteBox from '@/components/ui/NoteBox';
 import UploadBox from '@/components/ui/UploadBox';
 import EmptyState from '@/components/ui/EmptyState';
 import { BookCover } from '@/components/books/BookCover';
+import ListSelect from '@/components/ui/ListSelect';
+import { useFacets } from '@/hooks/useFacets';
 import Lightbox from '@/components/ui/Lightbox';
 import { coverForDraft } from '@/contexts/BookDraftContext';
 import { useAppData } from '@/contexts/AppDataContext';
@@ -49,9 +51,21 @@ function DuplicateListingConfirm({ titles, onConfirm, onCancel }) {
 const SCAN_STEPS = ['Reading your photo…', 'Detecting book covers…', 'Matching titles and authors…'];
 const MIN_SCAN_MS = 1300;
 
+// What a row holds when the scan found no title / author. The fields start empty
+// (with this as their placeholder) instead of showing it as if it were typed.
+const NO_TITLE = 'Untitled — tap to edit';
+const NO_AUTHOR = 'Unknown author';
+
+// A detected genre that only differs by case/hyphens ("non fiction") selects the
+// list's own spelling, and one that isn't in the list at all is still offered so
+// it isn't lost — same matching as the add-book form.
+const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const resolveGenre = (options, current) => options.find((o) => norm(o) === norm(current)) ?? current;
+const withCurrent = (options, current) => (current && !options.some((o) => norm(o) === norm(current)) ? [current, ...options] : options);
+
 function toDetectedItem(candidate, i) {
-  const title = candidate.title || 'Untitled — tap to edit';
-  const author = candidate.author || 'Unknown author';
+  const title = candidate.title || NO_TITLE;
+  const author = candidate.author || NO_AUTHOR;
   const genre = candidate.genre || 'Others';
   return {
     id: `d${i}`,
@@ -79,6 +93,7 @@ export default function BulkUploadPage() {
   const showToast = useToast();
   const { publishBook, removeListing } = useAppData();
   const { openSheet, closeSheet } = useSheet();
+  const facets = useFacets();
   const [phase, setPhase] = useState('idle'); // idle | scanning | review | empty
   const [stepIndex, setStepIndex] = useState(0);
   const [detected, setDetected] = useState([]);
@@ -148,6 +163,15 @@ export default function BulkUploadPage() {
 
   const allSelected = selected.length === detected.length;
 
+  // Title / author / genre are edited right in each row; anything the member
+  // changes marks the book as edited (the pill says so).
+  const updateItem = (id, patch) =>
+    setDetected((list) => list.map((x) => {
+      if (x.id !== id) return x;
+      const next = { ...x, ...patch, edited: true };
+      return { ...next, ...coverForDraft({ title: next.title, author: next.author, genre: next.genre }) };
+    }));
+
   // One combined prompt for the whole batch, not one per duplicate — the
   // user already chose which books to include via the checkboxes above, so
   // asking the same "already listed?" question over and over per book (with
@@ -178,6 +202,9 @@ export default function BulkUploadPage() {
 
   const publishSelected = async () => {
     const chosen = detected.filter((d) => selected.includes(d.id));
+    // The title field can now be cleared in the row itself.
+    const untitled = chosen.find((d) => !d.title.trim() || d.title === NO_TITLE);
+    if (untitled) return showToast('Please add a title for every book you are adding');
     // Several distinct books in the photo is what "bulk" means — with just
     // one, this run is really a single-book add, so the photo the user took
     // is that one book's own actual-condition photo, not a "group" photo:
@@ -193,8 +220,8 @@ export default function BulkUploadPage() {
 
     for (const d of chosen) {
       const payload = {
-        title: d.title,
-        author: d.author,
+        title: d.title.trim(),
+        author: d.author.trim() || NO_AUTHOR,
         genre: d.genre,
         lang: d.lang,
         cond: 'Good',
@@ -333,11 +360,12 @@ export default function BulkUploadPage() {
               <div>
                 <b style={{ fontFamily: 'var(--font-display)', fontSize: 19 }}>{detected.length} books detected</b>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                  Uncheck a book to leave it out
+                  Edit anything that looks off, or uncheck a book to skip it
                 </div>
               </div>
               <button
                 className="link-green"
+                style={{ whiteSpace: 'nowrap', marginLeft: 10 }}
                 onClick={() => setSelected(allSelected ? [] : detected.map((d) => d.id))}
               >
                 {allSelected ? 'Deselect all' : 'Select all'}
@@ -354,12 +382,18 @@ export default function BulkUploadPage() {
               {detected.map((d) => {
                 const on = selected.includes(d.id);
                 return (
-                  <label className={`bulk-item${on ? '' : ' off'}`} key={d.id}>
-                    <input type="checkbox" className="bulk-check" checked={on} onChange={() => toggle(d.id)} />
+                  <div className={`bulk-item${on ? '' : ' off'}`} key={d.id}>
+                    <input
+                      type="checkbox"
+                      className="bulk-check"
+                      aria-label={`Add ${d.title || 'this book'}`}
+                      checked={on}
+                      onChange={() => toggle(d.id)}
+                    />
                     <button
                       type="button"
                       style={{ width: 42, flexShrink: 0, padding: 0, border: 'none', background: 'none' }}
-                      onClick={(e) => { if (d.coverImageUrl) { e.preventDefault(); setZoomSrc(d.coverImageUrl); } }}
+                      onClick={() => { if (d.coverImageUrl) setZoomSrc(d.coverImageUrl); }}
                       aria-label={d.coverImageUrl ? 'View cover full size' : undefined}
                     >
                       <BookCover
@@ -368,14 +402,42 @@ export default function BulkUploadPage() {
                         style={{ width: 42, aspectRatio: '2/3', flexShrink: 0 }}
                       />
                     </button>
-                    <div className="bulk-item-info">
-                      <b>{d.title}</b>
-                      <span>{d.unmatched ? 'Could not verify — check details' : `${d.author} · ${d.genre}`}</span>
+                    {/* Title, author and genre are edited right here — no extra tap to open a form. */}
+                    <div className="bulk-fields">
+                      {/* A book the member has edited says so, whatever the scan's confidence was. */}
+                      <span className={`status-pill bulk-pill ${d.edited || d.confidence === 'high' ? 'st-avail' : 'st-given'}`}>
+                        {d.edited ? '✎ Edited' : d.unmatched ? '⚠ Unverified' : d.confidence === 'high' ? '✓ High match' : '⚠ Low confidence'}
+                      </span>
+                      <input
+                        className="bulk-input"
+                        aria-label="Book title"
+                        placeholder="Book title"
+                        title={d.title === NO_TITLE ? '' : d.title}
+                        value={d.title === NO_TITLE ? '' : d.title}
+                        onChange={(e) => updateItem(d.id, { title: e.target.value })}
+                      />
+                      {/* Side by side where there's room, stacked on a phone. */}
+                      <div className="bulk-row2">
+                        <input
+                          className="bulk-input"
+                          aria-label="Author"
+                          placeholder="Author"
+                          title={d.author === NO_AUTHOR ? '' : d.author}
+                          value={d.author === NO_AUTHOR ? '' : d.author}
+                          onChange={(e) => updateItem(d.id, { author: e.target.value })}
+                        />
+                        <ListSelect
+                          id={`bulk-genre-${d.id}`}
+                          value={resolveGenre(facets.genres, d.genre)}
+                          options={withCurrent(facets.genres, d.genre)}
+                          placeholder="Select genre"
+                          align="right"
+                          wide
+                          onChange={(genre) => updateItem(d.id, { genre })}
+                        />
+                      </div>
                     </div>
-                    <span className={`status-pill ${d.confidence === 'high' ? 'st-avail' : 'st-given'}`}>
-                      {d.unmatched ? '⚠ Unverified' : d.confidence === 'high' ? '✓ High match' : '⚠ Low confidence'}
-                    </span>
-                  </label>
+                  </div>
                 );
               })}
             </div>
