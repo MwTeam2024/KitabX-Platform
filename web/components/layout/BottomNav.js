@@ -24,7 +24,7 @@ export default function BottomNav() {
         // chat's off, so this always resolves to 0 for now.
         const count = item.showUnread ? item.unreadCount || 0 : 0;
         return (
-          <Link key={item.href} href={item.href} className={`nav-btn ${item.cls}${active ? ' on' : ''}`}>
+          <Link key={item.href} href={item.href} data-tour={item.cls} className={`nav-btn ${item.cls}${active ? ' on' : ''}`}>
             <span className="nico">
               <Icon name={item.icon} />
               {/* Only rendered when there is something unread — never an empty dot. */}

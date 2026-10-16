@@ -7,6 +7,7 @@ import Icon from '@/components/ui/Icon';
 import ScreenHeader from '@/components/ui/ScreenHeader';
 import HeaderActions from '@/components/layout/HeaderActions';
 import BottomNav from '@/components/layout/BottomNav';
+import AppTour from '@/components/tour/AppTour';
 import RadiusStepper from '@/components/discovery/RadiusStepper';
 import StatTiles from '@/components/discovery/StatTiles';
 import FilterChips from '@/components/discovery/FilterChips';
@@ -150,12 +151,12 @@ export default function HomePage() {
   return (
     <>
       <ScreenHeader right={<HeaderActions />}>
-        <button className="loc-pill" onClick={openPlace} aria-label="Change where to browse books">
+        <button className="loc-pill" data-tour="location" onClick={openPlace} aria-label="Change where to browse books">
           <Icon name="mapPin" />
           <span>{place === 'current' ? (placeName || 'Current location') : (user?.society?.name || 'Your society')}</span>
           <Icon name="chevronDown" style={{ width: 11, height: 11 }} />
         </button>
-        <div className="search-wrap">
+        <div className="search-wrap" data-tour="search">
           <Icon name="search" className="ic search-ic" />
           <input
             className="search-input"
@@ -205,10 +206,11 @@ export default function HomePage() {
         />
       </div>
 
-      <button className="fab" onClick={() => router.push('/books/add')}>
+      <button className="fab" data-tour="fab" onClick={() => router.push('/books/add')}>
         List Book
       </button>
       <BottomNav />
+      <AppTour />
     </>
   );
 }

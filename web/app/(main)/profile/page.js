@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/ToastProvider';
 import { SUPPORT_WHATSAPP_LINK } from '@/lib/constants';
 import { shareReferral } from '@/lib/shareReferral';
+import { TOUR_REQUEST_KEY } from '@/components/tour/AppTour';
 
 /** Screen 19 — public trust profile plus help & support (§Module 2, §13). */
 export default function ProfilePage() {
@@ -63,6 +64,21 @@ export default function ProfilePage() {
   };
 
   const menu = [
+    // Replays the first-visit tour: leaves a note the Discover screen picks up.
+    {
+      label: 'How KitabX works',
+      icon: 'info',
+      bg: 'var(--gold-soft)',
+      color: 'var(--gold-deep)',
+      onClick: () => {
+        try {
+          window.sessionStorage.setItem(TOUR_REQUEST_KEY, '1');
+        } catch {
+          // Storage blocked — the tour just won't open.
+        }
+        router.push('/home');
+      },
+    },
     { label: 'FAQs', icon: 'helpCircle', bg: 'var(--sindoor-soft)', color: 'var(--sindoor)', onClick: faqs },
     {
       label: 'Chat on WhatsApp',
@@ -159,7 +175,7 @@ export default function ProfilePage() {
         <div style={{ margin: '22px 16px 12px' }}>
           <SectionTitle size={17}>Exchange history</SectionTitle>
         </div>
-        <button className="menu-row" onClick={() => router.push('/exchanges?tab=done')}>
+        <button className="menu-row" onClick={() => router.push('/exchanges?tab=done&from=profile')}>
           <div className="menu-ic round" style={{ background: 'var(--mint)', color: 'var(--brand-2)' }}>
             <Icon name="layers" />
           </div>

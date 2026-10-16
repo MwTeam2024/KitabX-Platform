@@ -392,14 +392,15 @@ export default function BulkUploadPage() {
                     />
                     <button
                       type="button"
-                      style={{ width: 42, flexShrink: 0, padding: 0, border: 'none', background: 'none' }}
+                      className="bulk-cover"
                       onClick={() => { if (d.coverImageUrl) setZoomSrc(d.coverImageUrl); }}
                       aria-label={d.coverImageUrl ? 'View cover full size' : undefined}
                     >
+                      {/* Fills the button, which is as tall as the fields beside it. */}
                       <BookCover
                         book={{ ...d, title: '' }}
                         photoUrl={d.coverImageUrl}
-                        style={{ width: 42, aspectRatio: '2/3', flexShrink: 0 }}
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
                       />
                     </button>
                     {/* Title, author and genre are edited right here — no extra tap to open a form. */}

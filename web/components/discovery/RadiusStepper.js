@@ -12,7 +12,7 @@ export default function RadiusStepper() {
   const { radiusKm, adjustRadius } = useLocation();
 
   return (
-    <div className="radius-row">
+    <div className="radius-row" data-tour="radius">
       <div className="radius-l"><Icon name="mapPin" />Discovery radius</div>
       <div className="stepper">
         <button

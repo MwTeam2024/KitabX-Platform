@@ -20,7 +20,7 @@ const EMPTY = {
   cancelled: { icon: '↩️', title: 'No cancelled or declined exchanges.', hint: 'Anything declined, cancelled or expired shows up here.' },
 };
 
-export default function ExchangeList({ initialTab = 'forme' }) {
+export default function ExchangeList({ initialTab = 'forme', backHref }) {
   const router = useRouter();
   const showToast = useToast();
   const { exchanges, acceptExchange, declineExchange, refreshExchanges } = useAppData();
@@ -62,7 +62,7 @@ export default function ExchangeList({ initialTab = 'forme' }) {
 
   return (
     <>
-      <ScreenHeader right={<HeaderActions />} />
+      <ScreenHeader back={!!backHref} backHref={backHref} right={<HeaderActions />} />
 
       <div className="app-scroll">
         <div style={{ padding: '16px 16px 4px' }}>
@@ -76,11 +76,13 @@ export default function ExchangeList({ initialTab = 'forme' }) {
           style={{ marginTop: 14 }}
           active={tab}
           onChange={setTab}
+          // A "0" says nothing and costs width — four tabs plus their counts didn't fit a
+          // phone, so "Cancelled" ran off the end. Counts only show when there's something.
           tabs={[
-            { key: 'forme', label: 'For Me', count: groups.forme.length, danger: pendingIncoming > 0 },
-            { key: 'mine', label: 'My Requests', count: groups.mine.length },
-            { key: 'done', label: 'Completed', count: groups.done.length },
-            { key: 'cancelled', label: 'Cancelled', count: groups.cancelled.length },
+            { key: 'forme', label: 'For Me', count: groups.forme.length || undefined, danger: pendingIncoming > 0 },
+            { key: 'mine', label: 'My Requests', count: groups.mine.length || undefined },
+            { key: 'done', label: 'Completed', count: groups.done.length || undefined },
+            { key: 'cancelled', label: 'Cancelled', count: groups.cancelled.length || undefined },
           ]}
         />
 
