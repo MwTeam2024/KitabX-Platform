@@ -35,7 +35,7 @@ const STEPS = [
   {
     target: '[data-tour="credits"]',
     title: 'Your credits',
-    text: 'Requesting a book costs 1 credit. You earn one every time a book you listed is handed over. Tap to see your balance and history.',
+    text: 'You get 1 credit the moment you list a book, and requesting a book costs 1 credit. Tap to see your balance and history.',
   },
   {
     target: '[data-tour="share"]',
@@ -46,6 +46,11 @@ const STEPS = [
     target: '[data-tour="notifications"]',
     title: 'Notifications',
     text: 'Requests, pickup times and updates on your exchanges show up here.',
+  },
+  {
+    target: '[data-tour="profile"]',
+    title: 'Your profile',
+    text: 'Your profile, completed exchanges, settings, FAQs and support are all here.',
   },
   {
     target: '[data-tour="nav-discover"]',
