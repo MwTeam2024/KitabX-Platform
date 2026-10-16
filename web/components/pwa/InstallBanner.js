@@ -17,6 +17,11 @@ const INSTALLED_QUIET_MS = 30 * 24 * 60 * 60 * 1000;
 // way of sign-in, onboarding, the admin console or any other screen.
 const SHOW_ON_PATH = '/home';
 
+// Once per time the app is opened — not every time the member comes back to the
+// home screen from another page. Lives in module memory, so moving between
+// screens keeps it, while a fresh open or a full reload starts clean.
+let shownThisVisit = false;
+
 // Chrome fires `beforeinstallprompt` once, a few hundred ms after load — before
 // React's JavaScript runs. app/layout.js keeps it on `window.__kxInstallPrompt`
 // from an inline script that runs first; this reads it (and clears it once it's
@@ -50,8 +55,8 @@ function onIos() {
 
 /**
  * "Add KitabX to your home screen" — a small card at the top that appears a
- * couple of seconds after the app opens (every time it opens) and goes away by
- * itself after a few seconds.
+ * couple of seconds after the app opens (once per open — not on every return to
+ * the home screen) and goes away by itself after a few seconds.
  *
  * Android (Chrome): Install opens the browser's own install dialog and the app
  * lands on the home screen. iOS has no way to install from a button — Apple
@@ -59,9 +64,9 @@ function onIos() {
  * Browsers that never fire the install event get the "browser menu" steps.
  *
  * Shown on the home screen only (see SHOW_ON_PATH — that includes landing there
- * right after signing in), every time it opens. Closing it with ✕ is only for
- * now; it stays away only inside the installed app and for a month after the
- * app has been installed.
+ * right after signing in), once per open. Closing it with ✕ is only for now; it
+ * stays away inside the installed app and for a month after the app has been
+ * installed.
  */
 export default function InstallBanner() {
   const pathname = usePathname();
@@ -90,8 +95,9 @@ export default function InstallBanner() {
     const installedAt = Number(readStorage('localStorage', INSTALLED_KEY));
     const recentlyInstalled = installedAt && Date.now() - installedAt < INSTALLED_QUIET_MS;
     let timer;
-    if (!isStandalone() && !recentlyInstalled) {
+    if (!shownThisVisit && !isStandalone() && !recentlyInstalled) {
       timer = setTimeout(() => {
+        shownThisVisit = true;
         // Picks up a prompt that fired between the first render and now.
         setDeferred((current) => current || getStoredPrompt());
         setIos(onIos());
